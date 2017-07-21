@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="WINDOWS-1252" standalone="no"?>
+<jardesc>
+    <jar path="xmwebui/xmwebui.jar"/>
+    <options buildIfNeeded="true" compress="true" descriptionLocation="/xmwebui/xmwebui.jardesc" exportErrors="true" exportWarnings="true" includeDirectoryEntries="false" overwrite="false" saveDescription="true" storeRefactorings="false" useSourceFolders="false"/>
+    <storedRefactorings deprecationInfo="true" structuralOnly="false"/>
+    <selectedProjects/>
+    <manifest generateManifest="true" manifestLocation="" manifestVersion="1.0" reuseManifest="false" saveManifest="false" usesManifest="true">
+        <sealing sealJar="false">
+            <packagesToSeal/>
+            <packagesToUnSeal/>
+        </sealing>
+    </manifest>
+    <selectedElements exportClassFiles="true" exportJavaFiles="true" exportOutputFolder="false">
+        <javaElement handleIdentifier="=xmwebui/&lt;com.aelitis.azureus.plugins.remsearch.internat"/>
+        <javaElement handleIdentifier="=xmwebui/&lt;com.aelitis.azureus.plugins.xmwebui.client.connect"/>
+        <javaElement handleIdentifier="=xmwebui/&lt;com.aelitis.azureus.plugins.remsearch.test"/>
+        <javaElement handleIdentifier="=xmwebui/&lt;com.aelitis.azureus.plugins.xmwebui.client"/>
+        <javaElement handleIdentifier="=xmwebui/&lt;com.aelitis.azureus.plugins.xmwebui.internat"/>
+        <javaElement handleIdentifier="=xmwebui/&lt;com.aelitis.azureus.plugins.xmwebui"/>
+        <javaElement handleIdentifier="=xmwebui/&lt;com.aelitis.azureus.plugins.xmwebui.client.rpc"/>
+        <javaElement handleIdentifier="=xmwebui/&lt;com.aelitis.azureus.plugins.remsearch"/>
+        <javaElement handleIdentifier="=xmwebui/&lt;com.aelitis.azureus.plugins.xmwebui.swt"/>
+        <javaElement handleIdentifier="=xmwebui/&lt;com.aelitis.azureus.plugins.xmwebui.client.proxy"/>
+    </selectedElements>
+</jardesc>
