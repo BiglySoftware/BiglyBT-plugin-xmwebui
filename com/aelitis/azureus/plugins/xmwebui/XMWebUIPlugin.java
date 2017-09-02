@@ -3891,6 +3891,10 @@ XMWebUIPlugin
 				Download download = destubbify( download_stub );
 				
 				int	state = download.getState();
+				if (state == Download.ST_ERROR) {
+					// Stop on an error torrent should stop it immediately
+					download.stop();
+				}
 				
 				if ( state != Download.ST_DOWNLOADING && state != Download.ST_SEEDING ){
 				
