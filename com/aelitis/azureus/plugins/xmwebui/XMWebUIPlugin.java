@@ -25,7 +25,10 @@ package com.aelitis.azureus.plugins.xmwebui;
 import static com.aelitis.azureus.plugins.xmwebui.TransmissionVars.*;
 
 import java.io.*;
-import java.net.*;
+import java.net.MalformedURLException;
+import java.net.URI;
+import java.net.URL;
+import java.net.URLDecoder;
 import java.text.DateFormat;
 import java.text.NumberFormat;
 import java.text.ParseException;
@@ -34,10 +37,15 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.zip.GZIPInputStream;
 
+import org.gudy.bouncycastle.util.encoders.Base64;
+import org.json.simple.JSONObject;
+import org.json.simple.JSONValue;
+
 import com.aelitis.azureus.plugins.remsearch.RemSearchPluginPageGenerator;
 import com.aelitis.azureus.plugins.remsearch.RemSearchPluginPageGeneratorAdaptor;
 import com.aelitis.azureus.plugins.remsearch.RemSearchPluginSearch;
 import com.biglybt.core.Core;
+import com.biglybt.core.CoreFactory;
 import com.biglybt.core.category.Category;
 import com.biglybt.core.category.CategoryManager;
 import com.biglybt.core.config.COConfigurationManager;
@@ -55,11 +63,33 @@ import com.biglybt.core.ipfilter.IpFilterManagerFactory;
 import com.biglybt.core.ipfilter.impl.IpFilterAutoLoaderImpl;
 import com.biglybt.core.logging.LogAlert;
 import com.biglybt.core.logging.Logger;
-import com.biglybt.core.peer.*;
+import com.biglybt.core.metasearch.*;
+import com.biglybt.core.metasearch.impl.web.WebEngine;
+import com.biglybt.core.pairing.PairingManager;
+import com.biglybt.core.pairing.PairingManagerFactory;
+import com.biglybt.core.peer.PEPeer;
+import com.biglybt.core.peer.PEPeerManager;
+import com.biglybt.core.peer.PEPeerSource;
+import com.biglybt.core.peer.PEPeerStats;
 import com.biglybt.core.peer.util.PeerUtils;
+import com.biglybt.core.security.CryptoManager;
+import com.biglybt.core.subs.*;
+import com.biglybt.core.tag.Tag;
+import com.biglybt.core.tag.TagManager;
+import com.biglybt.core.tag.TagManagerFactory;
+import com.biglybt.core.tag.TagType;
+import com.biglybt.core.torrent.PlatformTorrentUtils;
 import com.biglybt.core.torrent.TOTorrent;
-import com.biglybt.core.tracker.client.*;
+import com.biglybt.core.tracker.TrackerPeerSource;
+import com.biglybt.core.tracker.client.TRTrackerAnnouncer;
+import com.biglybt.core.tracker.client.TRTrackerAnnouncerResponse;
+import com.biglybt.core.tracker.client.TRTrackerScraper;
+import com.biglybt.core.tracker.client.TRTrackerScraperResponse;
 import com.biglybt.core.util.*;
+import com.biglybt.core.versioncheck.VersionCheckClient;
+import com.biglybt.core.vuzefile.VuzeFile;
+import com.biglybt.core.vuzefile.VuzeFileComponent;
+import com.biglybt.core.vuzefile.VuzeFileHandler;
 import com.biglybt.pif.*;
 import com.biglybt.pif.config.ConfigParameter;
 import com.biglybt.pif.config.ConfigParameterListener;
@@ -67,43 +97,30 @@ import com.biglybt.pif.disk.DiskManagerFileInfo;
 import com.biglybt.pif.download.*;
 import com.biglybt.pif.download.DownloadStub.DownloadStubFile;
 import com.biglybt.pif.logging.LoggerChannel;
-import com.biglybt.pif.torrent.*;
+import com.biglybt.pif.torrent.Torrent;
+import com.biglybt.pif.torrent.TorrentAttribute;
+import com.biglybt.pif.torrent.TorrentDownloader;
+import com.biglybt.pif.torrent.TorrentManager;
 import com.biglybt.pif.tracker.web.TrackerWebPageRequest;
 import com.biglybt.pif.tracker.web.TrackerWebPageResponse;
 import com.biglybt.pif.ui.UIInstance;
 import com.biglybt.pif.ui.UIManagerListener;
 import com.biglybt.pif.ui.config.BooleanParameter;
 import com.biglybt.pif.ui.model.BasicPluginConfigModel;
-import com.biglybt.pif.update.*;
+import com.biglybt.pif.update.Update;
+import com.biglybt.pif.update.UpdateCheckInstance;
+import com.biglybt.pif.update.UpdateCheckInstanceListener;
+import com.biglybt.pif.update.UpdateManager;
 import com.biglybt.pif.utils.Utilities;
 import com.biglybt.pif.utils.Utilities.JSONServer;
 import com.biglybt.pif.utils.resourcedownloader.ResourceDownloader;
 import com.biglybt.pif.utils.resourcedownloader.ResourceDownloaderAdapter;
 import com.biglybt.pifimpl.local.PluginCoreUtils;
 import com.biglybt.pifimpl.local.utils.resourcedownloader.ResourceDownloaderFactoryImpl;
-import com.biglybt.ui.webplugin.WebPlugin;
-import org.gudy.bouncycastle.util.encoders.Base64;
-import org.json.simple.JSONObject;
-import org.json.simple.JSONValue;
-
-import com.biglybt.core.CoreFactory;
-import com.biglybt.core.metasearch.*;
-import com.biglybt.core.metasearch.impl.web.WebEngine;
-import com.biglybt.core.pairing.PairingManager;
-import com.biglybt.core.pairing.PairingManagerFactory;
-import com.biglybt.core.security.CryptoManager;
-import com.biglybt.core.subs.*;
-import com.biglybt.core.tag.*;
-import com.biglybt.core.torrent.PlatformTorrentUtils;
-import com.biglybt.core.tracker.TrackerPeerSource;
-import com.biglybt.core.util.MultiPartDecoder;
-import com.biglybt.core.versioncheck.VersionCheckClient;
-import com.biglybt.core.vuzefile.VuzeFile;
-import com.biglybt.core.vuzefile.VuzeFileComponent;
-import com.biglybt.core.vuzefile.VuzeFileHandler;
 import com.biglybt.plugin.dht.DHTPlugin;
 import com.biglybt.plugin.startstoprules.defaultplugin.DefaultRankCalculator;
 import com.biglybt.plugin.startstoprules.defaultplugin.StartStopRulesDefaultPlugin;
+import com.biglybt.ui.webplugin.WebPlugin;
 import com.biglybt.util.JSONUtils;
 import com.biglybt.util.MapUtils;
 import com.biglybt.util.PlayUtils;
@@ -256,17 +273,26 @@ XMWebUIPlugin
 
 		log = plugin_interface.getLogger().getChannel( "xmwebui" );
 		defaults.put(PR_LOG, log);
-		
+
+		PluginConfig pluginconfig = plugin_interface.getPluginconfig();
+		if (!pluginconfig.hasPluginParameter("Password")
+				&& !pluginconfig.hasPluginParameter("Password Enable")) {
+			pluginconfig.setPluginParameter("Password Enable", true);
+			SHA1Hasher hasher = new SHA1Hasher();
+			pluginconfig.setPluginParameter("Password",
+					hasher.calculateHash(RandomUtils.nextSecureHash()));
+		}
+
 		super.initialize( _plugin_interface );
-		
-		plugin_interface.getUtilities().getLocaleUtilities().integrateLocalisedMessageBundle( 
+
+		plugin_interface.getUtilities().getLocaleUtilities().integrateLocalisedMessageBundle(
 				"com.aelitis.azureus.plugins.xmwebui.internat.Messages" );
 		
 		t_id = plugin_interface.getTorrentManager().getPluginAttribute( "xmui.dl.id" );
 		
 		BasicPluginConfigModel	config = getConfigModel();
 			
-        int port = plugin_interface.getPluginconfig().getPluginIntParameter( WebPlugin.CONFIG_PORT, CONFIG_PORT_DEFAULT );
+        int port = pluginconfig.getPluginIntParameter( WebPlugin.CONFIG_PORT, CONFIG_PORT_DEFAULT );
 
 		config.addLabelParameter2( "xmwebui.blank" );
 
@@ -288,7 +314,7 @@ XMWebUIPlugin
 			}
 		});
 		
-		ConfigParameter mode_parameter = plugin_interface.getPluginconfig().getPluginParameter( WebPlugin.CONFIG_MODE );
+		ConfigParameter mode_parameter = pluginconfig.getPluginParameter( WebPlugin.CONFIG_MODE );
 
 		if ( mode_parameter == null ){
 
