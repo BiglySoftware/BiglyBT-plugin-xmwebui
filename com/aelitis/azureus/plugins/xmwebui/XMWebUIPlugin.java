@@ -2703,7 +2703,7 @@ XMWebUIPlugin
 		final PluginInterface dht_pi = 
 				plugin_interface.getPluginManager().getPluginInterfaceByClass(
 							DHTPlugin.class );
-		DHTPlugin dht = (DHTPlugin)dht_pi.getPlugin();
+		DHTPlugin dht = dht_pi == null ? null : (DHTPlugin)dht_pi.getPlugin();
 		
 		PluginInterface piUTP = plugin_interface.getPluginManager().getPluginInterfaceByID("azutp");
 		boolean hasUTP = piUTP != null && piUTP.getPluginState().isOperational() && piUTP.getPluginconfig().getPluginBooleanParameter("utp.enabled", true);
@@ -2714,7 +2714,7 @@ XMWebUIPlugin
 		// RPC v5, but no constant!
 		result.put( "blocklist-size", ipFilter.getNbRanges());           	// number     number of rules in the blocklist
     result.put(TransmissionVars.TR_PREFS_KEY_MAX_CACHE_SIZE_MB, 0 );  // TODO
-    result.put(TransmissionVars.TR_PREFS_KEY_DHT_ENABLED, dht.isInitialising() || dht.isEnabled() );
+    result.put(TransmissionVars.TR_PREFS_KEY_DHT_ENABLED, dht != null && (dht.isInitialising() || dht.isEnabled()) );
     result.put(TransmissionVars.TR_PREFS_KEY_UTP_ENABLED, hasUTP );
     result.put(TransmissionVars.TR_PREFS_KEY_LPD_ENABLED, false );
     result.put(TransmissionVars.TR_PREFS_KEY_DOWNLOAD_DIR, save_dir);
