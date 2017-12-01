@@ -275,11 +275,17 @@ XMWebUIPlugin
 		defaults.put(PR_LOG, log);
 
 		PluginConfig pluginconfig = plugin_interface.getPluginconfig();
-		if (!pluginconfig.hasPluginParameter("Password")
-				&& !pluginconfig.hasPluginParameter("Password Enable")) {
+		
+		if (	!PairingManagerFactory.getSingleton().isEnabled() && 
+				!pluginconfig.hasPluginParameter("Password")
+				&& !pluginconfig.hasPluginParameter("Password Enable")){
+			
 			pluginconfig.setPluginParameter("Config Migrated", true);
+			
 			pluginconfig.setPluginParameter("Password Enable", true);
+			
 			SHA1Hasher hasher = new SHA1Hasher();
+			
 			pluginconfig.setPluginParameter("Password",
 					hasher.calculateHash(RandomUtils.nextSecureHash()));
 		}
