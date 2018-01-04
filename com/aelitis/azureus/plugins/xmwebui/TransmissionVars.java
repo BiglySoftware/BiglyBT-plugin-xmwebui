@@ -275,8 +275,45 @@ public class TransmissionVars
 
 	public static final String FIELD_TORRENT_DATE_ADDED = "addedDate";
 
-	public static final String FIELD_TORRENT_HASH = "hashString";
+	public static final String FIELD_TORRENT_DATE_STARTED = "startDate";
 
+	public static final String FIELD_TORRENT_DATE_ACTIVITY = "activityDate";
+
+	public static final String FIELD_TORRENT_DATE_DONE = "doneDate";
+
+	public static final String FIELD_TORRENT_SECONDS_DOWNLOADING = "secondsDownloading";
+
+	public static final String FIELD_TORRENT_SECONDS_SEEDING = "secondsSeeding";
+
+	public static final String FIELD_TORRENT_CREATOR = "creator";
+
+	public static final String FIELD_TORRENT_COMMENT = "comment";
+
+	public static final String FIELD_TORRENT_USER_COMMENT = "user-comment";
+
+	public static final String FIELD_TORRENT_DOWNLOAD_DIR = "downloadDir";
+
+	public static final String FIELD_TORRENT_DOWNLOADED_EVER = "downloadedEver";
+
+	public static final String FIELD_TORRENT_UPLOADED_EVER = "uploadedEver";
+
+	public static final String FIELD_TORRENT_PEERS = "peers";
+
+	public static final String FIELD_TORRENT_SEEDS = "seeds";
+
+	public static final String FIELD_TORRENT_LEFT_UNTIL_DONE = "leftUntilDone";
+
+	public static final String FIELD_TORRENT_HASH_STRING = "hashString";
+
+	public static final String FIELD_TORRENT_FILES = "files";
+
+	public static final String FIELD_TORRENT_FILESTATS = "fileStats";
+
+	public static final String FIELD_TORRENT_TAG_UIDS = "tag-uids";
+
+	public static final String FIELD_LAST_UPDATED = "LastUpdated";
+
+	public static final String FIELD_TORRENT_IS_COMPLETE = "isComplete";
 	//////////////////////////////////////////////////////////////////////////////
 
 	public static final String TR_SESSION_STATS_ACTIVE_TORRENT_COUNT = "activeTorrentCount";
@@ -302,17 +339,11 @@ public class TransmissionVars
 	public static final String FIELD_FILES_NAME = "name";
 	public static final String FIELD_FILES_CONTENT_URL = "contentURL";
 	public static final String FIELD_FILES_FULL_PATH = "fullPath";
-	
-	//////////////////////////////////////////////////////////////////////////////
-	
-	public static long convertVuzePriority(int priority) {
-		return priority == 0 ? TransmissionVars.TR_PRI_NORMAL
-				: priority < 0 ? TransmissionVars.TR_PRI_LOW
-						: TransmissionVars.TR_PRI_HIGH;
-	}
 
-	//////////////////////////////////////////////////////////////////////////////
-	
+	public static final String FIELD_FILES_INDEX = "index";
+
+	///////////////////////////////////////////////////////////////////////////////
+
 	public static final int TR_STATUS_STOPPED        = 0; /* Torrent is stopped */
 	public static final int TR_STATUS_CHECK_WAIT     = 1; /* Queued to check files */
 	public static final int TR_STATUS_CHECK          = 2; /* Checking files */
@@ -321,9 +352,48 @@ public class TransmissionVars
 	public static final int TR_STATUS_SEED_WAIT      = 5; /* Queued to seed */
 	public static final int TR_STATUS_SEED           = 6; /* Seeding */
 
-	//////////////////////////////////////////////////////////////////////////////
+	///////////////////////////////////////////////////////////////////////////////
 
+	public static final String FIELD_PEERS_ADDRESS = "address";
+
+	public static final String FIELD_PEERS_CLIENT_NAME = "clientName";
+
+	public static final String FIELD_PEERS_RATE_TO_PEER_BPS = "rateToPeer";
+
+	public static final String FIELD_PEERS_RATE_TO_CLIENT_BPS = "rateToClient";
+
+	public static final String FIELD_PEERS_CC = "cc";
+
+	public static final String FIELD_PEERS_PROGRESS = "progress";
+
+	public static final String FIELD_PEERS_CLIENT_CHOKED = "clientIsChoked";
+
+	public static final String FIELD_PEERS_CLIENT_INTERESTED = "clientIsInterested";
+
+	public static final String FIELD_PEERS_FLAGSTR = "flagStr";
+
+	public static final String FIELD_PEERS_IS_DLING_FROM = "isDownloadingFrom";
+
+	public static final String FIELD_PEERS_IS_ENCRYPTED = "isEncrypted";
+
+	public static final String FIELD_PEERS_IS_INCOMING = "isIncoming";
+
+	public static final String FIELD_PEERS_IS_ULING_TO = "isUploadingTo";
+
+	public static final String FIELD_PEERS_IS_UTP = "isUTP";
+
+	public static final String FIELD_PEERS_PEER_CHOKED = "peerIsChoked";
+
+	public static final String FIELD_PEERS_PEER_INTERESTED = "peerIsInterested";
+
+	public static final String FIELD_PEERS_PORT = "port";
+
+	///////////////////////////////////////////////////////////////////////////////
+
+	public static final String FIELD_SUBSCRIPTION_LIST = "subscriptions";
 	public static final String FIELD_SUBSCRIPTION_NAME = "name";
+	public static final String FIELD_SUBSCRIPTION_NEWCOUNT = "newResultsCount";
+
 	public static final String FIELD_SUBSCRIPTION_ADDEDON = "addedDate";
 	public static final String FIELD_SUBSCRIPTION_ASSOCIATION_COUNT = "associationCount";
 	public static final String FIELD_SUBSCRIPTION_POPULARITY = "popularity";
@@ -355,8 +425,66 @@ public class TransmissionVars
 	public static final String FIELD_SUBSCRIPTION_ENGINE_LASTUPDATED = "lastUpdated";
 	public static final String FIELD_SUBSCRIPTION_ENGINE_SOURCE = "source";
 
+	public static final String FIELD_SUBSCRIPTION_FAVICON = "favicon";
+
+	//////////////////////////////////////////////////////////////////////////////
+
 	public static final String FIELD_SUBSCRIPTION_RESULT_UID = "u";
 	public static final String FIELD_SUBSCRIPTION_RESULT_ISREAD = "subs_is_read";
+	public static final String FIELD_SUBSCRIPTION_RESULT_NAME = "n";
+	public static final String FIELD_SUBSCRIPTION_RESULT_ID = "subs_id";
+
+	//////////////////////////////////////////////////////////////////////////////
+
+	public static final String FIELD_SEARCHRESULT_PUBLISHDATE = "ts";
+
+	public static final String FIELD_SEARCHRESULT_CATEGORY = "c";
+
+	public static final String FIELD_SEARCHRESULT_NAME = "n";
+
+	public static final String FIELD_SEARCHRESULT_SIZE = "lb";
+
+	public static final String FIELD_SEARCHRESULT_RANK = "r";
+
+	public static final String FIELD_SEARCHRESULT_HASH = "h";
+
+	public static final String FIELD_SEARCHRESULT_URL = "dl";
+
+	public static final String FIELD_SEARCHRESULT_SEEDS = "s";
+
+	public static final String FIELD_SEARCHRESULT_PEERS = "p";
+
+	public static final String FIELD_SEARCHRESULT_ENGINE_ID = "engine-id";
+
+	public static final String FIELD_SEARCHRESULT_COMPLETE = "complete";
+
+	public static final String FIELD_SEARCHRESULT_SEARCH_ID = "sid";
+
+	//////////////////////////////////////////////////////////////////////////////
+
+	public static final String FIELD_RCM_PUBLISHDATE = "publishDate";
+
+	public static final String FIELD_RCM_TAGS = "tags";
+
+	public static final String FIELD_RCM_NAME = "title";
+
+	public static final String FIELD_RCM_SIZE = "size";
+
+	public static final String FIELD_RCM_RANK = "rank";
+
+	public static final String FIELD_RCM_HASH = "hash";
+
+	public static final String FIELD_RCM_SEEDS = "seeds";
+
+	public static final String FIELD_RCM_PEERS = "peers";
+
+	public static final String FIELD_RCM_LAST_SEEN_SECS = "lastSeenSecs";
+
+	public static final String FIELD_RCM_CHANGEDON = "changedOn";
+
+	public static final String FIELD_RCM_UI_ENABLED = "ui-enabled";
+
+	//////////////////////////////////////////////////////////////////////////////
 
 	public static final String FIELD_TAG_NAME = "name";
 	public static final String FIELD_TAG_COUNT = "count";
@@ -372,5 +500,70 @@ public class TransmissionVars
 	public static final String FIELD_TAG_GROUP = "group";
 	public static final String FIELD_TAG_AUTO_ADD = "auto_add";
 	public static final String FIELD_TAG_AUTO_REMOVE = "auto_remove";
+
+//////////////////////////////////////////////////////////////////////////////
+
+	public static final String FIELD_FREESPACE_PATH = "path";
+
+	public static final String FIELD_FREESPACE_SIZE_BYTES = "size-bytes";
+
+	//////////////////////////////////////////////////////////////////////////////
+	// RPC call methods
+
+	public static final String METHOD_SESSION_STATS = "session-stats";
+
+	public static final String METHOD_TORRENT_SET = "torrent-set";
+
+	public static final String METHOD_TORRENT_SET_LOCATION = "torrent-set-location";
+
+	public static final String METHOD_TORRENT_GET = "torrent-get";
+
+	public static final String METHOD_TORRENT_REMOVE = "torrent-remove";
+
+	public static final String METHOD_SESSION_SET = "session-set";
+
+	public static final String METHOD_SESSION_GET = "session-get";
+
+	public static final String METHOD_SUBSCRIPTION_GET = "subscription-get";
+
+	public static final String METHOD_SUBSCRIPTION_SET = "subscription-set";
+
+	public static final String METHOD_SUBSCRIPTION_REMOVE = "subscription-remove";
+
+	public static final String METHOD_VUZE_SEARCH_GET_RESULTS = "vuze-search-get-results";
+
+	public static final String METHOD_RCM_IS_ENABLED = "rcm-is-enabled";
+
+	public static final String METHOD_RCM_SET_ENABLED = "rcm-set-enabled";
+
+	public static final String METHOD_RCM_GET_LIST = "rcm-get-list";
+
+	public static final String METHOD_Q_MOVE_BOTTOM = "queue-move-bottom";
+
+	public static final String METHOD_Q_MOVE_TOP = "queue-move-top";
+
+	public static final String METHOD_FREE_SPACE = "free-space";
+
+	public static final String METHOD_TAGS_LOOKUP_START = "tags-lookup-start";
+
+	public static final String METHOD_TAGS_LOOKUP_GET_RESULTS = "tags-lookup-get-results";
+
+	public static final String METHOD_TORRENT_REANNOUNCE = "torrent-reannounce";
+
+	//////////////////////////////////////////////////////////////////////////////
+	// RPC call method arguments
+
+	public static final String ARG_TORRENT_GET_FILE_FIELDS = "file-fields";
+
+	public static final String ARG_IDS = "ids";
+
+	//////////////////////////////////////////////////////////////////////////////
+
+	public static long convertVuzePriority(int priority) {
+		return priority == 0 ? TransmissionVars.TR_PRI_NORMAL
+				: priority < 0 ? TransmissionVars.TR_PRI_LOW
+				: TransmissionVars.TR_PRI_HIGH;
+	}
+	//////////////////////////////////////////////////////////////////////////////
 
 }

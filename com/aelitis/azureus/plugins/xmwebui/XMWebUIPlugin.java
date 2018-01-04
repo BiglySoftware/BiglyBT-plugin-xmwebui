@@ -22,25 +22,6 @@
 
 package com.aelitis.azureus.plugins.xmwebui;
 
-import static com.aelitis.azureus.plugins.xmwebui.TransmissionVars.*;
-
-import java.io.*;
-import java.net.MalformedURLException;
-import java.net.URI;
-import java.net.URL;
-import java.net.URLDecoder;
-import java.text.DateFormat;
-import java.text.NumberFormat;
-import java.text.ParseException;
-import java.util.*;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
-import java.util.zip.GZIPInputStream;
-
-import org.gudy.bouncycastle.util.encoders.Base64;
-import org.json.simple.JSONObject;
-import org.json.simple.JSONValue;
-
 import com.aelitis.azureus.plugins.remsearch.RemSearchPluginPageGenerator;
 import com.aelitis.azureus.plugins.remsearch.RemSearchPluginPageGeneratorAdaptor;
 import com.aelitis.azureus.plugins.remsearch.RemSearchPluginSearch;
@@ -63,7 +44,11 @@ import com.biglybt.core.ipfilter.IpFilterManagerFactory;
 import com.biglybt.core.ipfilter.impl.IpFilterAutoLoaderImpl;
 import com.biglybt.core.logging.LogAlert;
 import com.biglybt.core.logging.Logger;
-import com.biglybt.core.metasearch.*;
+import com.biglybt.core.metasearch.Engine;
+import com.biglybt.core.metasearch.MetaSearch;
+import com.biglybt.core.metasearch.MetaSearchManager;
+import com.biglybt.core.metasearch.MetaSearchManagerFactory;
+import com.biglybt.core.metasearch.SearchParameter;
 import com.biglybt.core.metasearch.impl.web.WebEngine;
 import com.biglybt.core.pairing.PairingManager;
 import com.biglybt.core.pairing.PairingManagerFactory;
@@ -73,7 +58,12 @@ import com.biglybt.core.peer.PEPeerSource;
 import com.biglybt.core.peer.PEPeerStats;
 import com.biglybt.core.peer.util.PeerUtils;
 import com.biglybt.core.security.CryptoManager;
-import com.biglybt.core.subs.*;
+import com.biglybt.core.subs.Subscription;
+import com.biglybt.core.subs.SubscriptionException;
+import com.biglybt.core.subs.SubscriptionHistory;
+import com.biglybt.core.subs.SubscriptionManager;
+import com.biglybt.core.subs.SubscriptionManagerFactory;
+import com.biglybt.core.subs.SubscriptionResult;
 import com.biglybt.core.tag.Tag;
 import com.biglybt.core.tag.TagManager;
 import com.biglybt.core.tag.TagManagerFactory;
@@ -85,17 +75,55 @@ import com.biglybt.core.tracker.client.TRTrackerAnnouncer;
 import com.biglybt.core.tracker.client.TRTrackerAnnouncerResponse;
 import com.biglybt.core.tracker.client.TRTrackerScraper;
 import com.biglybt.core.tracker.client.TRTrackerScraperResponse;
-import com.biglybt.core.util.*;
+import com.biglybt.core.util.AENetworkClassifier;
+import com.biglybt.core.util.AESemaphore;
+import com.biglybt.core.util.AETemporaryFileHandler;
+import com.biglybt.core.util.AEThread2;
+import com.biglybt.core.util.AEVerifier;
+import com.biglybt.core.util.BDecoder;
+import com.biglybt.core.util.BEncoder;
+import com.biglybt.core.util.Base32;
+import com.biglybt.core.util.ByteFormatter;
+import com.biglybt.core.util.Constants;
+import com.biglybt.core.util.Debug;
+import com.biglybt.core.util.FileUtil;
+import com.biglybt.core.util.MultiPartDecoder;
+import com.biglybt.core.util.RandomUtils;
+import com.biglybt.core.util.SHA1Hasher;
+import com.biglybt.core.util.SimpleTimer;
+import com.biglybt.core.util.SystemTime;
+import com.biglybt.core.util.TimerEvent;
+import com.biglybt.core.util.TimerEventPerformer;
+import com.biglybt.core.util.TimerEventPeriodic;
+import com.biglybt.core.util.TorrentUtils;
+import com.biglybt.core.util.UrlUtils;
 import com.biglybt.core.versioncheck.VersionCheckClient;
 import com.biglybt.core.vuzefile.VuzeFile;
 import com.biglybt.core.vuzefile.VuzeFileComponent;
 import com.biglybt.core.vuzefile.VuzeFileHandler;
-import com.biglybt.pif.*;
+import com.biglybt.pif.PluginAdapter;
+import com.biglybt.pif.PluginConfig;
+import com.biglybt.pif.PluginEvent;
+import com.biglybt.pif.PluginEventListener;
+import com.biglybt.pif.PluginException;
+import com.biglybt.pif.PluginInterface;
+import com.biglybt.pif.PluginManager;
+import com.biglybt.pif.PluginState;
+import com.biglybt.pif.UnloadablePlugin;
 import com.biglybt.pif.config.ConfigParameter;
 import com.biglybt.pif.config.ConfigParameterListener;
 import com.biglybt.pif.disk.DiskManagerFileInfo;
-import com.biglybt.pif.download.*;
+import com.biglybt.pif.download.Download;
+import com.biglybt.pif.download.DownloadException;
+import com.biglybt.pif.download.DownloadManagerListener;
+import com.biglybt.pif.download.DownloadRemovalVetoException;
+import com.biglybt.pif.download.DownloadScrapeResult;
+import com.biglybt.pif.download.DownloadStats;
+import com.biglybt.pif.download.DownloadStub;
 import com.biglybt.pif.download.DownloadStub.DownloadStubFile;
+import com.biglybt.pif.download.DownloadStubEvent;
+import com.biglybt.pif.download.DownloadStubListener;
+import com.biglybt.pif.download.DownloadWillBeAddedListener;
 import com.biglybt.pif.logging.LoggerChannel;
 import com.biglybt.pif.torrent.Torrent;
 import com.biglybt.pif.torrent.TorrentAttribute;
@@ -124,6 +152,47 @@ import com.biglybt.ui.webplugin.WebPlugin;
 import com.biglybt.util.JSONUtils;
 import com.biglybt.util.MapUtils;
 import com.biglybt.util.PlayUtils;
+
+import org.gudy.bouncycastle.util.encoders.Base64;
+import org.json.simple.JSONObject;
+import org.json.simple.JSONValue;
+
+import java.io.File;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.io.LineNumberReader;
+import java.io.OutputStreamWriter;
+import java.io.PrintWriter;
+import java.io.UnsupportedEncodingException;
+import java.net.MalformedURLException;
+import java.net.URI;
+import java.net.URL;
+import java.net.URLDecoder;
+import java.text.DateFormat;
+import java.text.NumberFormat;
+import java.text.ParseException;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Iterator;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Properties;
+import java.util.Set;
+import java.util.SortedMap;
+import java.util.TreeMap;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+import java.util.zip.GZIPInputStream;
+
+import static com.aelitis.azureus.plugins.xmwebui.TransmissionVars.*;
 
 @SuppressWarnings({
 	"unchecked",
@@ -1405,7 +1474,7 @@ XMWebUIPlugin
 				// to get 271 working with this backend change remote.js RPC _Root to be
 				// _Root                   : './transmission/rpc',
 	
-			if ( method.equals( "session-set" )){
+			if ( method.equals(METHOD_SESSION_SET)){
 	
 				try{
 					method_Session_Set(args, result);
@@ -1417,11 +1486,11 @@ XMWebUIPlugin
 					COConfigurationManager.save();
 				}
 	
-			} else if ( method.equals( "session-get" ) ){
+			} else if ( method.equals(METHOD_SESSION_GET) ){
 	
 				method_Session_Get(args, result);
 				
-			}else if ( method.equals( "session-stats" )){
+			}else if ( method.equals(METHOD_SESSION_STATS)){
 	
 				method_Session_Stats(args, result);
 				
@@ -1472,27 +1541,27 @@ XMWebUIPlugin
 	
 				method_Torrent_Verify(args, result);
 	
-			}else if ( method.equals( "torrent-remove" )){
+			}else if ( method.equals(METHOD_TORRENT_REMOVE)){
 				// RPC v3
 	
 				method_Torrent_Remove(args, result);
 	
 				save_core_state = true;
 				
-			}else if ( method.equals( "torrent-set" )){
+			}else if ( method.equals(METHOD_TORRENT_SET)){
 				
 				method_Torrent_Set( session_id, args, result);
 				
-			}else if ( method.equals( "torrent-get" )){
+			}else if ( method.equals(METHOD_TORRENT_GET)){
 	
 				method_Torrent_Get(request, session_id, args, result);
 	
-			}else if ( method.equals( "torrent-reannounce" )){
+			}else if ( method.equals(METHOD_TORRENT_REANNOUNCE)){
 				// RPC v5
 	
 				method_Torrent_Reannounce(args, result);
 				
-			}else if ( method.equals( "torrent-set-location" )){
+			}else if ( method.equals(METHOD_TORRENT_SET_LOCATION)){
 				// RPC v6
 				
 				method_Torrent_Set_Location(args, result);
@@ -1506,7 +1575,7 @@ XMWebUIPlugin
 				// RPC v12
 				//TODO: This method tells the transmission session to shut down.
 	
-			}else if ( method.equals( "queue-move-top" )){
+			}else if ( method.equals(METHOD_Q_MOVE_TOP)){
 				// RPC v14
 				method_Queue_Move_Top(args, result);
 	
@@ -1518,11 +1587,11 @@ XMWebUIPlugin
 				// RPC v14
 				method_Queue_Move_Down(args, result);
 	
-			}else if ( method.equals( "queue-move-bottom" )){
+			}else if ( method.equals(METHOD_Q_MOVE_BOTTOM)){
 				// RPC v14
 				method_Queue_Move_Bottom(args, result);
 	
-			}else if ( method.equals( "free-space" )){
+			}else if ( method.equals(METHOD_FREE_SPACE)){
 				// RPC v15
 				method_Free_Space(args, result);
 	
@@ -1534,15 +1603,15 @@ XMWebUIPlugin
 				// Vuze RPC v3
 				method_Tags_Get_List(args, result);
 
-			}else if ( method.equals( "tags-lookup-start" )){
+			}else if ( method.equals(METHOD_TAGS_LOOKUP_START)){
 
 				method_Tags_Lookup_Start(args, result);
 
-			}else if ( method.equals( "tags-lookup-get-results" )){
+			}else if ( method.equals(METHOD_TAGS_LOOKUP_GET_RESULTS)){
 
 				method_Tags_Lookup_Get_Results(args, result);
 
-			}else if ( method.equals( "subscription-get" )){
+			}else if ( method.equals(METHOD_SUBSCRIPTION_GET)){
 				
 				method_Subscription_Get(args, result);
 				
@@ -1550,11 +1619,11 @@ XMWebUIPlugin
 				
 				method_Subscription_Add(args, result);
 				
-			}else if ( method.equals( "subscription-set" )){
+			}else if ( method.equals(METHOD_SUBSCRIPTION_SET)){
 				
 				method_Subscription_Set(args, result);
 				
-			}else if ( method.equals( "subscription-remove" )){
+			}else if ( method.equals(METHOD_SUBSCRIPTION_REMOVE)){
 				
 				method_Subscription_Remove(args, result);
 				
@@ -1562,7 +1631,7 @@ XMWebUIPlugin
 				
 				method_Vuze_Search_Start(args, result);
 				
-			}else if ( method.equals( "vuze-search-get-results" )){
+			}else if ( method.equals(METHOD_VUZE_SEARCH_GET_RESULTS)){
 				
 				method_Vuze_Search_Get_Results(args, result);
 
@@ -1815,7 +1884,7 @@ XMWebUIPlugin
 		TagSearchInstance tagSearchInstance = new TagSearchInstance();
 
 		try {
-			List<String> listDefaultNetworks = new ArrayList<String>();
+			List<String> listDefaultNetworks = new ArrayList<>();
 			for (int i = 0; i < AENetworkClassifier.AT_NETWORKS.length; i++) {
 
 				String nn = AENetworkClassifier.AT_NETWORKS[i];
@@ -1913,7 +1982,7 @@ XMWebUIPlugin
 
 		MetaSearchManager ms_manager = MetaSearchManagerFactory.getSingleton();
 		MetaSearch ms = ms_manager.getMetaSearch();
-		List<SearchParameter> sps = new ArrayList<SearchParameter>();
+		List<SearchParameter> sps = new ArrayList<>();
 
 		sps.add(new SearchParameter("s", expression));
 
@@ -1946,7 +2015,7 @@ XMWebUIPlugin
 
 		result.put("sid", search_instance.getSID());
 
-		List<Map> l_engines = new ArrayList<Map>();
+		List<Map> l_engines = new ArrayList<>();
 		result.put("engines", l_engines);
 
 		for (Engine engine : engines) {
@@ -1967,7 +2036,7 @@ XMWebUIPlugin
 
 	private void method_Subscription_Add(Map args, Map result) throws MalformedURLException, SubscriptionException {
 		String url = MapUtils.getMapString(args, "rss-url", null);
-		String name = MapUtils.getMapString(args, "name",
+		String name = MapUtils.getMapString(args, FIELD_SUBSCRIPTION_NAME,
 				"Subscription " + DateFormat.getInstance().toString());
 		boolean anonymous = MapUtils.getMapBoolean(args, "anonymous", false);
 		
@@ -2142,7 +2211,7 @@ XMWebUIPlugin
 		boolean subscribedOnly = MapUtils.getMapBoolean(args, "subscribed-only",
 				true);
 
-		Map<Object, Map<String, Object>> mapSubcriptions = new HashMap<Object, Map<String, Object>>();
+		Map<Object, Map<String, Object>> mapSubcriptions = new HashMap<>();
 
 		SubscriptionManager subMan = SubscriptionManagerFactory.getSingleton();
 
@@ -2191,7 +2260,7 @@ XMWebUIPlugin
 			if (ids.length == 0) {
 				subscriptions = subMan.getSubscriptions(subscribedOnly);
 			} else {
-				List<Subscription> list = new ArrayList<Subscription>();
+				List<Subscription> list = new ArrayList<>();
 				for (String id : ids) {
 					Subscription subscriptionByID = subMan.getSubscriptionByID(id);
 					if (subscriptionByID == null) {
@@ -2210,14 +2279,14 @@ XMWebUIPlugin
 			}
 		}
 
-		result.put("subscriptions", mapSubcriptions);
+		result.put(FIELD_SUBSCRIPTION_LIST, mapSubcriptions);
 	}
 
 
 
 	private Map<String, Object> buildSubscriptionMap(Subscription sub, Map args,
 			List fields, boolean all) {
-		Map<String, Object> map = new HashMap<String, Object>();
+		Map<String, Object> map = new HashMap<>();
 		
 		if (all || Collections.binarySearch(fields,
 				"json") >= 0) {
@@ -2290,7 +2359,7 @@ XMWebUIPlugin
 
 					if (all || Collections.binarySearch(fields,
 							FIELD_SUBSCRIPTION_ENGINE_SOURCE) >= 0) {
-						mapEngine.put("source",
+						mapEngine.put(FIELD_SUBSCRIPTION_ENGINE_SOURCE,
 								Engine.ENGINE_SOURCE_STRS[engine.getSource()]);
 					}
 					if (all || Collections.binarySearch(fields,
@@ -2300,7 +2369,7 @@ XMWebUIPlugin
 					}
 
 					mapEngine.put("id", engine.getUID());
-					addNotNullToMap(mapEngine, "favicon", engine.getIcon());
+					addNotNullToMap(mapEngine, FIELD_SUBSCRIPTION_FAVICON, engine.getIcon());
 					mapEngine.put("dl_link_css", engine.getDownloadLinkCSS());
 					mapEngine.put("selected",
 							Engine.SEL_STATE_STRINGS[engine.getSelectionState()]);
@@ -2390,8 +2459,8 @@ XMWebUIPlugin
 		if (history != null) {
 			
 			if (all || Collections.binarySearch(fields,
-					"newResultsCount") >= 0) {
-				map.put("newResultsCount", history.getNumUnread());
+					FIELD_SUBSCRIPTION_NEWCOUNT) >= 0) {
+				map.put(FIELD_SUBSCRIPTION_NEWCOUNT, history.getNumUnread());
 			}
 			if (all || Collections.binarySearch(fields,
 					"nextScanTime") >= 0) {
@@ -2468,8 +2537,7 @@ XMWebUIPlugin
 			Collections.sort(fields);
 		}
 
-		List<SortedMap<String, Object>> listTags = 
-				new ArrayList<SortedMap<String,Object>>();
+		List<SortedMap<String, Object>> listTags = new ArrayList<>();
 
 		TagManager tm = TagManagerFactory.getTagManager();
 
@@ -2479,7 +2547,7 @@ XMWebUIPlugin
 			List<Tag> tags = tagType.getTags();
 			
 			for (Tag tag : tags) {
-				SortedMap<String, Object> map = new TreeMap<String, Object>();
+				SortedMap<String, Object> map = new TreeMap<>();
 				if (all || Collections.binarySearch(fields, FIELD_TAG_NAME) >= 0) {
 					map.put(FIELD_TAG_NAME, tag.getTagName(true));
 				}
@@ -2590,13 +2658,13 @@ XMWebUIPlugin
 			file = file.getParentFile();
 		}
 		if (file == null) {
-			result.put("path", oPath);
-			result.put("size-bytes", 0);
+			result.put(FIELD_FREESPACE_PATH, oPath);
+			result.put(FIELD_FREESPACE_SIZE_BYTES, 0);
 			return;
 		}
 		long space = FileUtil.getUsableSpace(file);
-		result.put("path", oPath);
-		result.put("size-bytes", space);
+		result.put(FIELD_FREESPACE_PATH, oPath);
+		result.put(FIELD_FREESPACE_SIZE_BYTES, space);
 	}
 
 	private void method_Queue_Move_Bottom(Map args, Map result) {
@@ -2716,83 +2784,83 @@ XMWebUIPlugin
 		boolean hasUTP = piUTP != null && piUTP.getPluginState().isOperational() && piUTP.getPluginconfig().getPluginBooleanParameter("utp.enabled", true);
 		
 
-    result.put(TransmissionVars.TR_PREFS_KEY_BLOCKLIST_ENABLED, ipFilter.isEnabled() );
-    result.put(TransmissionVars.TR_PREFS_KEY_BLOCKLIST_URL, filter_url );
+    result.put(TR_PREFS_KEY_BLOCKLIST_ENABLED, ipFilter.isEnabled() );
+    result.put(TR_PREFS_KEY_BLOCKLIST_URL, filter_url );
 		// RPC v5, but no constant!
 		result.put( "blocklist-size", ipFilter.getNbRanges());           	// number     number of rules in the blocklist
-    result.put(TransmissionVars.TR_PREFS_KEY_MAX_CACHE_SIZE_MB, 0 );  // TODO
-    result.put(TransmissionVars.TR_PREFS_KEY_DHT_ENABLED, dht != null && (dht.isInitialising() || dht.isEnabled()) );
-    result.put(TransmissionVars.TR_PREFS_KEY_UTP_ENABLED, hasUTP );
-    result.put(TransmissionVars.TR_PREFS_KEY_LPD_ENABLED, false );
-    result.put(TransmissionVars.TR_PREFS_KEY_DOWNLOAD_DIR, save_dir);
+    result.put(TR_PREFS_KEY_MAX_CACHE_SIZE_MB, 0 );  // TODO
+    result.put(TR_PREFS_KEY_DHT_ENABLED, dht != null && (dht.isInitialising() || dht.isEnabled()) );
+    result.put(TR_PREFS_KEY_UTP_ENABLED, hasUTP );
+    result.put(TR_PREFS_KEY_LPD_ENABLED, false );
+    result.put(TR_PREFS_KEY_DOWNLOAD_DIR, save_dir);
     // RPC 12 to 14
     result.put("download-dir-free-space", -1);
 
-    result.put(TransmissionVars.TR_PREFS_KEY_DSPEED_KBps, down_limit > 0 ? down_limit : pc.getUnsafeIntParameter("config.ui.speed.partitions.manual.download.last"));
-    result.put(TransmissionVars.TR_PREFS_KEY_DSPEED_ENABLED, down_limit != 0 );
-    result.put(TransmissionVars.TR_PREFS_KEY_ENCRYPTION, require_enc?"required":"preferred" );               		// string     "required", "preferred", "tolerated"
-    result.put(TransmissionVars.TR_PREFS_KEY_IDLE_LIMIT, 30 ); //TODO
-    result.put(TransmissionVars.TR_PREFS_KEY_IDLE_LIMIT_ENABLED, false );//TODO
-    result.put(TransmissionVars.TR_PREFS_KEY_INCOMPLETE_DIR, save_dir );
-    result.put(TransmissionVars.TR_PREFS_KEY_INCOMPLETE_DIR_ENABLED, false );//TODO
-    //result.put(TransmissionVars.TR_PREFS_KEY_MSGLEVEL, TR_MSG_INF ); // Not in Spec
-    result.put(TransmissionVars.TR_PREFS_KEY_DOWNLOAD_QUEUE_SIZE, 5 );//TODO
-    result.put(TransmissionVars.TR_PREFS_KEY_DOWNLOAD_QUEUE_ENABLED, true ); //TODO
-    result.put(TransmissionVars.TR_PREFS_KEY_PEER_LIMIT_GLOBAL, glob_con );
-    result.put(TransmissionVars.TR_PREFS_KEY_PEER_LIMIT_TORRENT, tor_con );
-    result.put(TransmissionVars.TR_PREFS_KEY_PEER_PORT, tcp_port );
-    result.put(TransmissionVars.TR_PREFS_KEY_PEER_PORT_RANDOM_ON_START, false ); //TODO
-    //result.put(TransmissionVars.TR_PREFS_KEY_PEER_PORT_RANDOM_LOW, 49152 ); // Not in Spec
-    //result.put(TransmissionVars.TR_PREFS_KEY_PEER_PORT_RANDOM_HIGH, 65535 ); // Not in Spec
-    //result.put(TransmissionVars.TR_PREFS_KEY_PEER_SOCKET_TOS, TR_DEFAULT_PEER_SOCKET_TOS_STR ); //TODO
-    result.put(TransmissionVars.TR_PREFS_KEY_PEX_ENABLED, true ); //TODO
-    result.put(TransmissionVars.TR_PREFS_KEY_PORT_FORWARDING, false ); //TODO
-    //result.put(TransmissionVars.TR_PREFS_KEY_PREALLOCATION, TR_PREALLOCATE_SPARSE ); //TODO
-    //result.put(TransmissionVars.TR_PREFS_KEY_PREFETCH_ENABLED, DEFAULT_PREFETCH_ENABLED ); //TODO
-    result.put(TransmissionVars.TR_PREFS_KEY_QUEUE_STALLED_ENABLED, true ); //TODO
-    result.put(TransmissionVars.TR_PREFS_KEY_QUEUE_STALLED_MINUTES, 30 ); //TODO
-    result.put(TransmissionVars.TR_PREFS_KEY_RATIO, 2.0 ); //TODO (wrong key?)
-    result.put(TransmissionVars.TR_PREFS_KEY_RATIO_ENABLED, false ); //TODO (wrong key?)
-    result.put(TransmissionVars.TR_PREFS_KEY_RENAME_PARTIAL_FILES, true ); //TODO
-    //result.put(TransmissionVars.TR_PREFS_KEY_RPC_AUTH_REQUIRED, false ); // Not in Spec
+    result.put(TR_PREFS_KEY_DSPEED_KBps, down_limit > 0 ? down_limit : pc.getUnsafeIntParameter("config.ui.speed.partitions.manual.download.last"));
+    result.put(TR_PREFS_KEY_DSPEED_ENABLED, down_limit != 0 );
+    result.put(TR_PREFS_KEY_ENCRYPTION, require_enc?"required":"preferred" );               		// string     "required", "preferred", "tolerated"
+    result.put(TR_PREFS_KEY_IDLE_LIMIT, 30 ); //TODO
+    result.put(TR_PREFS_KEY_IDLE_LIMIT_ENABLED, false );//TODO
+    result.put(TR_PREFS_KEY_INCOMPLETE_DIR, save_dir );
+    result.put(TR_PREFS_KEY_INCOMPLETE_DIR_ENABLED, false );//TODO
+    //result.put(TR_PREFS_KEY_MSGLEVEL, TR_MSG_INF ); // Not in Spec
+    result.put(TR_PREFS_KEY_DOWNLOAD_QUEUE_SIZE, 5 );//TODO
+    result.put(TR_PREFS_KEY_DOWNLOAD_QUEUE_ENABLED, true ); //TODO
+    result.put(TR_PREFS_KEY_PEER_LIMIT_GLOBAL, glob_con );
+    result.put(TR_PREFS_KEY_PEER_LIMIT_TORRENT, tor_con );
+    result.put(TR_PREFS_KEY_PEER_PORT, tcp_port );
+    result.put(TR_PREFS_KEY_PEER_PORT_RANDOM_ON_START, false ); //TODO
+    //result.put(TR_PREFS_KEY_PEER_PORT_RANDOM_LOW, 49152 ); // Not in Spec
+    //result.put(TR_PREFS_KEY_PEER_PORT_RANDOM_HIGH, 65535 ); // Not in Spec
+    //result.put(TR_PREFS_KEY_PEER_SOCKET_TOS, TR_DEFAULT_PEER_SOCKET_TOS_STR ); //TODO
+    result.put(TR_PREFS_KEY_PEX_ENABLED, true ); //TODO
+    result.put(TR_PREFS_KEY_PORT_FORWARDING, false ); //TODO
+    //result.put(TR_PREFS_KEY_PREALLOCATION, TR_PREALLOCATE_SPARSE ); //TODO
+    //result.put(TR_PREFS_KEY_PREFETCH_ENABLED, DEFAULT_PREFETCH_ENABLED ); //TODO
+    result.put(TR_PREFS_KEY_QUEUE_STALLED_ENABLED, true ); //TODO
+    result.put(TR_PREFS_KEY_QUEUE_STALLED_MINUTES, 30 ); //TODO
+    result.put(TR_PREFS_KEY_RATIO, 2.0 ); //TODO (wrong key?)
+    result.put(TR_PREFS_KEY_RATIO_ENABLED, false ); //TODO (wrong key?)
+    result.put(TR_PREFS_KEY_RENAME_PARTIAL_FILES, true ); //TODO
+    //result.put(TR_PREFS_KEY_RPC_AUTH_REQUIRED, false ); // Not in Spec
     //String bindIP = pc.getPluginStringParameter(WebPlugin.CONFIG_BIND_IP);
-    //result.put(TransmissionVars.TR_PREFS_KEY_RPC_BIND_ADDRESS, bindIP == null || bindIP.length() == 0 ? "0.0.0.0" : bindIP );
-    //result.put(TransmissionVars.TR_PREFS_KEY_RPC_ENABLED, false ); // Not in Spec
-    //result.put(TransmissionVars.TR_PREFS_KEY_RPC_PASSWORD, "" ); // Not in Spec
-    //result.put(TransmissionVars.TR_PREFS_KEY_RPC_USERNAME, "" ); // Not in Spec
-    //result.put(TransmissionVars.TR_PREFS_KEY_RPC_WHITELIST, TR_DEFAULT_RPC_WHITELIST ); // Not in Spec
-    //result.put(TransmissionVars.TR_PREFS_KEY_RPC_WHITELIST_ENABLED, true ); // Not in Spec
-    //result.put(TransmissionVars.TR_PREFS_KEY_RPC_PORT, atoi( TR_DEFAULT_RPC_PORT_STR ) ); // Not in Spec
-    //result.put(TransmissionVars.TR_PREFS_KEY_RPC_URL, TR_DEFAULT_RPC_URL_STR ); // Not in Spec
-    //result.put(TransmissionVars.TR_PREFS_KEY_SCRAPE_PAUSED_TORRENTS, true ); // Not in Spec
-    result.put(TransmissionVars.TR_PREFS_KEY_SCRIPT_TORRENT_DONE_FILENAME, "" ); //TODO
-    result.put(TransmissionVars.TR_PREFS_KEY_SCRIPT_TORRENT_DONE_ENABLED, false ); //TODO
-    result.put(TransmissionVars.TR_PREFS_KEY_SEED_QUEUE_SIZE, 10 ); //TODO
-    result.put(TransmissionVars.TR_PREFS_KEY_SEED_QUEUE_ENABLED, false ); //TODO
-    result.put(TransmissionVars.TR_PREFS_KEY_ALT_SPEED_ENABLED, false ); //TODO
-    result.put(TransmissionVars.TR_PREFS_KEY_ALT_SPEED_UP_KBps, 50 );  //TODO
-    result.put(TransmissionVars.TR_PREFS_KEY_ALT_SPEED_DOWN_KBps, 50 );  //TODO
-    result.put(TransmissionVars.TR_PREFS_KEY_ALT_SPEED_TIME_BEGIN, 540 ); /* 9am */  //TODO
-    result.put(TransmissionVars.TR_PREFS_KEY_ALT_SPEED_TIME_ENABLED, false ); //TODO
-    result.put(TransmissionVars.TR_PREFS_KEY_ALT_SPEED_TIME_END, 1020 ); /* 5pm */ //TODO
-    result.put(TransmissionVars.TR_PREFS_KEY_ALT_SPEED_TIME_DAY, TransmissionVars.TR_SCHED_ALL ); //TODO
-    result.put(TransmissionVars.TR_PREFS_KEY_USPEED_KBps, up_limit > 0 ? up_limit :pc.getUnsafeIntParameter("config.ui.speed.partitions.manual.upload.last"));
-    result.put(TransmissionVars.TR_PREFS_KEY_USPEED_ENABLED, up_limit != 0);
-    //result.put(TransmissionVars.TR_PREFS_KEY_UMASK, 022 ); // Not in Spec
-    result.put(TransmissionVars.TR_PREFS_KEY_UPLOAD_SLOTS_PER_TORRENT, 14 ); //TODO
-    //result.put(TransmissionVars.TR_PREFS_KEY_BIND_ADDRESS_IPV4, TR_DEFAULT_BIND_ADDRESS_IPV4 ); //TODO
-    //result.put(TransmissionVars.TR_PREFS_KEY_BIND_ADDRESS_IPV6, TR_DEFAULT_BIND_ADDRESS_IPV6 ); //TODO
+    //result.put(TR_PREFS_KEY_RPC_BIND_ADDRESS, bindIP == null || bindIP.length() == 0 ? "0.0.0.0" : bindIP );
+    //result.put(TR_PREFS_KEY_RPC_ENABLED, false ); // Not in Spec
+    //result.put(TR_PREFS_KEY_RPC_PASSWORD, "" ); // Not in Spec
+    //result.put(TR_PREFS_KEY_RPC_USERNAME, "" ); // Not in Spec
+    //result.put(TR_PREFS_KEY_RPC_WHITELIST, TR_DEFAULT_RPC_WHITELIST ); // Not in Spec
+    //result.put(TR_PREFS_KEY_RPC_WHITELIST_ENABLED, true ); // Not in Spec
+    //result.put(TR_PREFS_KEY_RPC_PORT, atoi( TR_DEFAULT_RPC_PORT_STR ) ); // Not in Spec
+    //result.put(TR_PREFS_KEY_RPC_URL, TR_DEFAULT_RPC_URL_STR ); // Not in Spec
+    //result.put(TR_PREFS_KEY_SCRAPE_PAUSED_TORRENTS, true ); // Not in Spec
+    result.put(TR_PREFS_KEY_SCRIPT_TORRENT_DONE_FILENAME, "" ); //TODO
+    result.put(TR_PREFS_KEY_SCRIPT_TORRENT_DONE_ENABLED, false ); //TODO
+    result.put(TR_PREFS_KEY_SEED_QUEUE_SIZE, 10 ); //TODO
+    result.put(TR_PREFS_KEY_SEED_QUEUE_ENABLED, false ); //TODO
+    result.put(TR_PREFS_KEY_ALT_SPEED_ENABLED, false ); //TODO
+    result.put(TR_PREFS_KEY_ALT_SPEED_UP_KBps, 50 );  //TODO
+    result.put(TR_PREFS_KEY_ALT_SPEED_DOWN_KBps, 50 );  //TODO
+    result.put(TR_PREFS_KEY_ALT_SPEED_TIME_BEGIN, 540 ); /* 9am */  //TODO
+    result.put(TR_PREFS_KEY_ALT_SPEED_TIME_ENABLED, false ); //TODO
+    result.put(TR_PREFS_KEY_ALT_SPEED_TIME_END, 1020 ); /* 5pm */ //TODO
+    result.put(TR_PREFS_KEY_ALT_SPEED_TIME_DAY, TR_SCHED_ALL ); //TODO
+    result.put(TR_PREFS_KEY_USPEED_KBps, up_limit > 0 ? up_limit :pc.getUnsafeIntParameter("config.ui.speed.partitions.manual.upload.last"));
+    result.put(TR_PREFS_KEY_USPEED_ENABLED, up_limit != 0);
+    //result.put(TR_PREFS_KEY_UMASK, 022 ); // Not in Spec
+    result.put(TR_PREFS_KEY_UPLOAD_SLOTS_PER_TORRENT, 14 ); //TODO
+    //result.put(TR_PREFS_KEY_BIND_ADDRESS_IPV4, TR_DEFAULT_BIND_ADDRESS_IPV4 ); //TODO
+    //result.put(TR_PREFS_KEY_BIND_ADDRESS_IPV6, TR_DEFAULT_BIND_ADDRESS_IPV6 ); //TODO
 
     result.put("config-dir", "" ); //TODO
 
     boolean startStopped = COConfigurationManager.getBooleanParameter("Default Start Torrents Stopped");
-    result.put(TransmissionVars.TR_PREFS_KEY_START, !startStopped ); //TODO
+    result.put(TR_PREFS_KEY_START, !startStopped ); //TODO
     
 		boolean renamePartial = COConfigurationManager.getBooleanParameter("Rename Incomplete Files");
-    result.put(TransmissionVars.TR_PREFS_KEY_RENAME_PARTIAL_FILES, renamePartial); 
+    result.put(TR_PREFS_KEY_RENAME_PARTIAL_FILES, renamePartial); 
 		
 
-    result.put(TransmissionVars.TR_PREFS_KEY_TRASH_ORIGINAL, false ); //TODO
+    result.put(TR_PREFS_KEY_TRASH_ORIGINAL, false ); //TODO
 
     String az_version = Constants.AZUREUS_VERSION;
     
@@ -2804,6 +2872,7 @@ XMWebUIPlugin
     }catch( Throwable e ){
     }
 
+    // "port" was used until RPC v5  (now "peer-port")
 		result.put( "port", new Long( tcp_port ) );                	// number     port number
 		result.put( "rpc-version", new Long( 15 ));              	// number     the current RPC API version
 		result.put( "rpc-version-minimum", new Long( 6 ));      	// number     the minimum RPC API version supported
@@ -2959,7 +3028,7 @@ XMWebUIPlugin
           // "alt-speed-time-day"             | number     | what day(s) to turn on alt speeds (look at tr_sched_day)
           // "alt-speed-up"                   | number     | max global upload speed (KBps)
 
-				} else if (key.equals("blocklist-url")) {
+				} else if (key.equals(TR_PREFS_KEY_BLOCKLIST_URL)) {
 					// "blocklist-url"                  | string     | location of the blocklist to use for "blocklist-update"
 					IpFilter ipFilter = IpFilterManagerFactory.getSingleton().getIPFilter();
 					COConfigurationManager.setParameter("Ip Filter Autoload File",
@@ -2972,23 +3041,21 @@ XMWebUIPlugin
 						e.printStackTrace();
 					}
 					
-				} else if (key.equals("blocklist-enabled")) {
+				} else if (key.equals(TR_PREFS_KEY_BLOCKLIST_ENABLED)) {
 					// "blocklist-enabled"              | boolean    | true means enabled
 					plugin_interface.getIPFilter().setEnabled(getBoolean(val));
 					
-				} else if (key.equals("cache-size-mb")) {
+				} else if (key.equals(TR_PREFS_KEY_MAX_CACHE_SIZE_MB)) {
 					// "cache-size-mb"                  | number     | maximum size of the disk cache (MB)
 					// umm.. not needed
 
-				} else if (key.equals("download-dir")) {
+				} else if (key.equals(TR_PREFS_KEY_DOWNLOAD_DIR)) {
 					// "download-dir"                   | string     | default path to download torrents
 
 					String dir = (String) val;
 
 					String save_dir = pc.getCoreStringParameter(PluginConfig.CORE_PARAM_STRING_DEFAULT_SAVE_PATH);
 					if (!save_dir.equals(dir)) {
-
-						save_dir = dir;
 
 						pc.setCoreStringParameter(
 								PluginConfig.CORE_PARAM_STRING_DEFAULT_SAVE_PATH, dir);
@@ -3002,15 +3069,15 @@ XMWebUIPlugin
 				} else if (key.equals("")) {
 				} else if (key.equals("")) {
 				} else if (key.equals("")) {
-				} else if (key.equals(TransmissionVars.TR_PREFS_KEY_START)) {
+				} else if (key.equals(TR_PREFS_KEY_START)) {
 
 					COConfigurationManager.setParameter("Default Start Torrents Stopped", !getBoolean(val));
 					
-				} else if (key.equals(TransmissionVars.TR_PREFS_KEY_RENAME_PARTIAL_FILES)) {
+				} else if (key.equals(TR_PREFS_KEY_RENAME_PARTIAL_FILES)) {
 					
 					COConfigurationManager.setParameter("Rename Incomplete Files", getBoolean(val));
 
-				} else if (key.equals("speed-limit-down-enabled")
+				} else if (key.equals(TR_PREFS_KEY_DSPEED_ENABLED)
 						|| key.equals("downloadLimited")) {
 
 					int down_limit = pc.getCoreIntParameter(PluginConfig.CORE_PARAM_INT_MAX_DOWNLOAD_SPEED_KBYTES_PER_SEC);
@@ -3033,7 +3100,7 @@ XMWebUIPlugin
 								PluginConfig.CORE_PARAM_INT_MAX_DOWNLOAD_SPEED_KBYTES_PER_SEC,
 								lastRate);
 					}
-				} else if (key.equals("speed-limit-down")
+				} else if (key.equals(TR_PREFS_KEY_DSPEED_KBps)
 						|| key.equals("downloadLimit")) {
 
 					int down_limit = pc.getCoreIntParameter(PluginConfig.CORE_PARAM_INT_MAX_DOWNLOAD_SPEED_KBYTES_PER_SEC);
@@ -3042,13 +3109,11 @@ XMWebUIPlugin
 
 					if (limit != down_limit) {
 
-						down_limit = limit;
-
 						pc.setCoreIntParameter(
 								PluginConfig.CORE_PARAM_INT_MAX_DOWNLOAD_SPEED_KBYTES_PER_SEC,
 								limit);
 					}
-				} else if (key.equals("speed-limit-up-enabled")
+				} else if (key.equals(TR_PREFS_KEY_USPEED_ENABLED)
 						|| key.equals("uploadLimited")) {
 					boolean enable = getBoolean(val);
 
@@ -3079,7 +3144,7 @@ XMWebUIPlugin
 								PluginConfig.CORE_PARAM_INT_MAX_UPLOAD_SPEED_SEEDING_KBYTES_PER_SEC,
 								lastRate);
 					}
-				} else if (key.equals("speed-limit-up") || key.equals("uploadLimit")) {
+				} else if (key.equals(TR_PREFS_KEY_USPEED_KBps) || key.equals("uploadLimit")) {
 
 					// turn off auto speed for both normal and seeding-only mode
 					// this will reset upload speed to what it was before it was on
@@ -3102,7 +3167,7 @@ XMWebUIPlugin
 
 					pc.setCoreIntParameter(PluginConfig.CORE_PARAM_INT_INCOMING_TCP_PORT,
 							port);
-				} else if (key.equals("encryption")) {
+				} else if (key.equals(TR_PREFS_KEY_ENCRYPTION)) {
 
 					String value = (String) val;
 
@@ -3373,7 +3438,7 @@ XMWebUIPlugin
 				|| Collections.binarySearch(fields, TR_SESSION_STATS_CUMULATIVE) >= 0) {
 			// RPC v4
 			Map cumulative_stats = new HashMap();
-			result.put("cumulative-stats", cumulative_stats);
+			result.put(TR_SESSION_STATS_CUMULATIVE, cumulative_stats);
 
 			// TODO: ALL!
 			cumulative_stats.put("uploadedBytes", 0);
@@ -3401,7 +3466,7 @@ XMWebUIPlugin
 
 		Number speed_limit_down = getNumber(
 				args.get("downloadLimit"),
-				getNumber(args.get("speed-limit-down"),
+				getNumber(args.get(TR_PREFS_KEY_DSPEED_KBps),
 						getNumber(args.get("speedLimitDownload"))));
 		Boolean downloadLimited = getBoolean("downloadLimited", null);
 
@@ -3423,16 +3488,16 @@ XMWebUIPlugin
 		List priority_low		= (List)args.get( "priority-low" );
 		List priority_normal	= (List)args.get( "priority-normal" );
 
-		List file_infos 		= (List)args.get( "files" );
+		List file_infos 		= (List)args.get(FIELD_TORRENT_FILES);
 		
 		// RPC v14
 		// "queuePosition"       | number     position of this torrent in its queue [0...n)
-		Number queuePosition = getNumber("queuePosition", null);
+		Number queuePosition = getNumber(FIELD_TORRENT_POSITION, null);
 
 		// RPC v10
 		// "seedIdleLimit"       | number     torrent-level number of minutes of seeding inactivity
 
-		// RPC v10: Not used, always TransmissionVars.TR_IDLELIMIT_GLOBAL
+		// RPC v10: Not used, always TR_IDLELIMIT_GLOBAL
 		// "seedIdleMode"        | number     which seeding inactivity to use.  See tr_inactvelimit (OR tr_idlelimit and TR_IDLELIMIT_*)
 
 		// RPC v5: Not Supported
@@ -3455,7 +3520,7 @@ XMWebUIPlugin
 		// "uploadLimit"         | number     maximum upload speed (KBps)
 		Number speed_limit_up = getNumber(
 				args.get("uploadLimit"),
-				getNumber(args.get("speed-limit-up"),
+				getNumber(args.get(TR_PREFS_KEY_USPEED_KBps),
 						getNumber(args.get("speedLimitUpload"))));
 
 		// "uploadLimited"       | boolean    true if "uploadLimit" is honored
@@ -3466,8 +3531,8 @@ XMWebUIPlugin
 		List tagAddList = (List) args.get("tagAdd");
 		List tagRemoveList = (List) args.get("tagRemove");
 
-		Long	l_uploaded_ever		= (Long)args.get( "uploadedEver" );
-		Long	l_downloaded_ever 	= (Long)args.get( "downloadedEver" );
+		Long	l_uploaded_ever		= (Long)args.get(FIELD_TORRENT_UPLOADED_EVER);
+		Long	l_downloaded_ever 	= (Long)args.get(FIELD_TORRENT_DOWNLOADED_EVER);
 		
 		long	uploaded_ever 	= l_uploaded_ever==null?-1:l_uploaded_ever.longValue();
 		long	downloaded_ever = l_downloaded_ever==null?-1:l_downloaded_ever.longValue();
@@ -3670,7 +3735,7 @@ XMWebUIPlugin
 							
 							Map file_info = (Map)file_infos.get( i );
 							
-							int index = ((Number)file_info.get( "index" )).intValue();
+							int index = ((Number)file_info.get(FIELD_FILES_INDEX)).intValue();
 							
 							if ( index < 0 || index >= files.length ){
 							
@@ -3731,8 +3796,7 @@ XMWebUIPlugin
 	private void addTagToDownload(Download download, Object tagToAdd, TagType tt) {
 		Tag tag = null;
 		if (tagToAdd instanceof String) {
-			String tagNameToAdd = (String) tagToAdd;
-			tagToAdd = tagNameToAdd.trim();
+			String tagNameToAdd = ((String) tagToAdd).trim();
 
 			if (tagNameToAdd.length() == 0) {
 				return;
@@ -4197,7 +4261,7 @@ XMWebUIPlugin
 				
 		final boolean add_stopped = getBoolean(args.get("paused"));
 		
-		String download_dir = (String) args.get("download-dir");
+		String download_dir = (String) args.get(TR_PREFS_KEY_DOWNLOAD_DIR);
 		
 		final File file_Download_dir = download_dir == null ? null : new File(download_dir);
 
@@ -4205,7 +4269,7 @@ XMWebUIPlugin
 		//getNumber(args.get("peer-limit"), 0);
 
 		// bandwidthPriority not used
-		//getNumber(args.get("bandwidthPriority"), TransmissionVars.TR_PRI_NORMAL);
+		//getNumber(args.get("bandwidthPriority"), TR_PRI_NORMAL);
 				
 		final DownloadWillBeAddedListener add_listener =
 			new DownloadWillBeAddedListener() {
@@ -4545,11 +4609,11 @@ XMWebUIPlugin
 			download = addTorrent( torrent, file_Download_dir, add_stopped, add_listener );
 		}
 		
-		Map<String, Object> torrent_details = new HashMap<String, Object>();
+		Map<String, Object> torrent_details = new HashMap<>();
 
 		torrent_details.put("id", new Long(getID(download, true)));
 		torrent_details.put("name", xmlEscape ? escapeXML(download.getName()) : download.getName());
-		torrent_details.put(TransmissionVars.FIELD_TORRENT_HASH,
+		torrent_details.put(FIELD_TORRENT_HASH_STRING,
 				ByteFormatter.encodeString(download.getTorrentHash()));
 
 		result.put(duplicate ? "torrent-duplicate" : "torrent-added", torrent_details);
@@ -4604,12 +4668,12 @@ XMWebUIPlugin
 		
 		List<DownloadStub>	downloads = getDownloads( ids, true );
 		
-		List<String> file_fields = (List<String>) args.get("file-fields");
+		List<String> file_fields = (List<String>) args.get(ARG_TORRENT_GET_FILE_FIELDS);
 		if (file_fields != null) {
 			Collections.sort(file_fields);
 		}
 				
-		Map<Long,Map>	torrent_info = new LinkedHashMap<Long, Map>();
+		Map<Long,Map>	torrent_info = new LinkedHashMap<>();
 		
 		String agent = MapUtils.getMapString(request.getHeaders(), "User-Agent", "");
 		boolean xmlEscape = agent.startsWith("Mozilla/");
@@ -4641,12 +4705,12 @@ XMWebUIPlugin
 				
 				if ( torrent_info_cache == null ){
 					
-					torrent_info_cache = new HashMap<Long, String>();
+					torrent_info_cache = new HashMap<>();
 					
 					session_torrent_info_cache.put( session_id, torrent_info_cache );
 				}
 				
-				List<Long>	same = new ArrayList<Long>();
+				List<Long>	same = new ArrayList<>();
 				
 				for ( Map.Entry<Long,Map> entry: torrent_info.entrySet()){
 					
@@ -4679,7 +4743,7 @@ XMWebUIPlugin
 			}
 		}
 		
-		List<Map>	torrents = new ArrayList<Map>();
+		List<Map>	torrents = new ArrayList<>();
 		
 		result.put( "torrents", torrents );
 
@@ -4746,7 +4810,7 @@ XMWebUIPlugin
 
 			Object value = null;
 
-			if (field.equals("activityDate")) {
+			if (field.equals(FIELD_TORRENT_DATE_ACTIVITY)) {
 				// RPC v0
 				// activityDate                | number                      | tr_stat
 				value = torrentGet_activityDate(core_download, false);
@@ -4756,7 +4820,7 @@ XMWebUIPlugin
 				// activityDate                | number                      | tr_stat
 				value = torrentGet_activityDate(core_download, true);
 
-			} else if (field.equals("addedDate")) {
+			} else if (field.equals(FIELD_TORRENT_DATE_ADDED)) {
 				// RPC v0
 				// addedDate                   | number                      | tr_stat
 				/** When the torrent was first added. */
@@ -4772,9 +4836,9 @@ XMWebUIPlugin
 				// RPC v5: Not Supported
 				// bandwidthPriority           | number                      | tr_priority_t
 				/** torrent's bandwidth priority. */
-				value = TransmissionVars.TR_PRI_NORMAL;
+				value = TR_PRI_NORMAL;
 
-			} else if (field.equals("comment")) {
+			} else if (field.equals(FIELD_TORRENT_COMMENT)) {
 				// RPC v0
 				// comment                     | string                      | tr_info
 
@@ -4790,7 +4854,7 @@ XMWebUIPlugin
 				 */
 				value = stats.getDiscarded() + stats.getHashFails();
 
-			} else if (field.equals("creator")) {
+			} else if (field.equals(FIELD_TORRENT_CREATOR)) {
 				// RPC v0
 				// creator                     | string                      | tr_info
 				value = t.getCreatedBy();
@@ -4810,7 +4874,7 @@ XMWebUIPlugin
 				 */
 				value = core_download.getStats().getRemainingExcludingDND();
 
-			} else if (field.equals("doneDate")) {
+			} else if (field.equals(FIELD_TORRENT_DATE_DONE)) {
 				// RPC v0
 				// doneDate                    | number                      | tr_stat
 				/** When the torrent finished downloading. */
@@ -4822,7 +4886,7 @@ XMWebUIPlugin
 					value = 0;
 				}
 
-			} else if (field.equals("downloadDir")) {
+			} else if (field.equals(FIELD_TORRENT_DOWNLOAD_DIR)) {
 				// RPC v4
 				// downloadDir                 | string                      | tr_torrent
 
@@ -4832,7 +4896,7 @@ XMWebUIPlugin
 					value = download.getSavePath();
 				}
 
-			} else if (field.equals("downloadedEver")) {
+			} else if (field.equals(FIELD_TORRENT_DOWNLOADED_EVER)) {
 				// RPC v0
 				// downloadedEver              | number                      | tr_stat
 
@@ -4844,7 +4908,7 @@ XMWebUIPlugin
 				value = stats.getDownloaded();
 
 			} else if (field.equals("downloadLimit")
-					|| field.equals("speed-limit-down")) {
+					|| field.equals(TR_PREFS_KEY_DSPEED_KBps)) {
 				// RPC v5 (alternate is from 'set' prior to v5 -- added for rogue clients)
 				// downloadLimit               | number                      | tr_torrent
 
@@ -4852,21 +4916,21 @@ XMWebUIPlugin
 				value = download.getMaximumDownloadKBPerSecond();
 
 			} else if (field.equals("downloadLimited")
-					|| field.equals("speed-limit-down-enabled")) {
+					|| field.equals(TR_PREFS_KEY_DSPEED_ENABLED)) {
 				// RPC v5 (alternate is from 'set' prior to v5 -- added for rogue clients)
 				// downloadLimited             | boolean                     | tr_torrent
 
 				/** true if "downloadLimit" is honored */
 				value = download.getDownloadRateLimitBytesPerSecond() > 0;
 
-			} else if (field.equals("error")) {
+			} else if (field.equals(FIELD_TORRENT_ERROR)) {
 				// RPC v0
 				// error                       | number                      | tr_stat
 				/** Defines what kind of text is in errorString. TR_STAT_* */
 
 				value = torrentGet_error(core_download, download);
 
-			} else if (field.equals("errorString")) {
+			} else if (field.equals(FIELD_TORRENT_ERROR_STRING)) {
 				// RPC v0
 				// errorString                 | string                      | tr_stat
 
@@ -4883,9 +4947,9 @@ XMWebUIPlugin
 				/** If seeding, number of seconds left until the idle time limit is reached. */
 				// TODO: No idea what etaIdle description means! What happens at idle time?
 
-				value = TransmissionVars.TR_ETA_UNKNOWN;
+				value = TR_ETA_UNKNOWN;
 
-			} else if (field.equals("files")) {
+			} else if (field.equals(FIELD_TORRENT_FILES)) {
 				// RPC v0
 
 				String host = (String)request.getHeaders().get( "host" );
@@ -4897,12 +4961,12 @@ XMWebUIPlugin
 				//	torrent.put("files-hc", longHashSimpleList((Collection<?>) value));
 				//}
 
-			} else if (field.equals("fileStats")) {
+			} else if (field.equals(FIELD_TORRENT_FILESTATS)) {
 				// RPC v5
 
 				value = torrentGet_fileStats(download, file_fields, args);
 
-			} else if (field.equals(TransmissionVars.FIELD_TORRENT_HASH)) {
+			} else if (field.equals(FIELD_TORRENT_HASH_STRING)) {
 				// RPC v0
 				// hashString                  | string                      | tr_info
 				value = ByteFormatter.encodeString(t.getHash());
@@ -4954,7 +5018,7 @@ XMWebUIPlugin
 				// Removed in RPC v7
 				value = pm == null ? 0 : pm.getNbPeers();
 
-			} else if (field.equals("leftUntilDone")) {
+			} else if (field.equals(FIELD_TORRENT_LEFT_UNTIL_DONE)) {
 				// RPC v0
 				// leftUntilDone               | number                      | tr_stat
 
@@ -5002,7 +5066,7 @@ XMWebUIPlugin
 				/** how many peers this torrent can connect to */
 				value = -1;
 
-			} else if (field.equals("peers")) {
+			} else if (field.equals(FIELD_TORRENT_PEERS)) {
 				// RPC v2
 
 				value = torrentGet_peers(core_download);
@@ -5027,7 +5091,7 @@ XMWebUIPlugin
 
 				value = peers_to_us;
 
-			} else if (field.equals("percentDone")) {
+			} else if (field.equals(FIELD_TORRENT_PERCENT_DONE)) {
 				// RPC v5
 				// percentDone                 | double                      | tr_stat
 				/** 
@@ -5049,21 +5113,21 @@ XMWebUIPlugin
 				// pieceSize                   | number                      | tr_info
 				value = t.getPieceSize();
 
-			} else if (field.equals("priorities")) {
+			} else if (field.equals(FIELD_TORRENT_PRIORITIES)) {
 
 				value = torrentGet_priorities(download);
 
-			} else if (field.equals("queuePosition")) {
+			} else if (field.equals(FIELD_TORRENT_POSITION)) {
 				// RPC v14
 				// "queuePosition"       | number     position of this torrent in its queue [0...n)
 
 				value = core_download.getPosition();
 
-			} else if (field.equals("rateDownload")) {
+			} else if (field.equals(FIELD_TORRENT_RATE_DOWNLOAD)) {
 				// rateDownload (B/s)          | number                      | tr_stat
 				value = stats.getDownloadAverage();
 
-			} else if (field.equals("rateUpload")) {
+			} else if (field.equals(FIELD_TORRENT_RATE_UPLOAD)) {
 				// rateUpload (B/s)            | number                      | tr_stat
 				value = stats.getUploadAverage();
 
@@ -5071,12 +5135,12 @@ XMWebUIPlugin
 				// recheckProgress             | double                      | tr_stat
 				value = torrentGet_recheckProgress(core_download, stats);
 
-			} else if (field.equals("secondsDownloading")) {
+			} else if (field.equals(FIELD_TORRENT_SECONDS_DOWNLOADING)) {
 				// secondsDownloading          | number                      | tr_stat
 				/** Cumulative seconds the torrent's ever spent downloading */
 				value = stats.getSecondsDownloading();
 
-			} else if (field.equals("secondsSeeding")) {
+			} else if (field.equals(FIELD_TORRENT_SECONDS_SEEDING)) {
 				// secondsSeeding              | number                      | tr_stat
 				/** Cumulative seconds the torrent's ever spent seeding */
 				// TODO: Want "only seeding" time, or seeding time (including downloading time)? 
@@ -5088,9 +5152,9 @@ XMWebUIPlugin
 				value = (int) stats.getSecondsSinceLastUpload() / 60;
 
 			} else if (field.equals("seedIdleMode")) {
-				// RPC v10: Not used, always TransmissionVars.TR_IDLELIMIT_GLOBAL
+				// RPC v10: Not used, always TR_IDLELIMIT_GLOBAL
 				// "seedIdleMode"        | number     which seeding inactivity to use.  See tr_inactvelimit
-				value = TransmissionVars.TR_IDLELIMIT_GLOBAL;
+				value = TR_IDLELIMIT_GLOBAL;
 
 			} else if (field.equals("seedRatioLimit")) {
 				// RPC v5
@@ -5101,9 +5165,9 @@ XMWebUIPlugin
 			} else if (field.equals("seedRatioMode")) {
 				// RPC v5: Not used, always Global
 				// seedRatioMode               | number                      | tr_ratiolimit
-				value = TransmissionVars.TR_RATIOLIMIT_GLOBAL;
+				value = TR_RATIOLIMIT_GLOBAL;
 
-			} else if (field.equals("sizeWhenDone")) {
+			} else if (field.equals(FIELD_TORRENT_SIZE_WHEN_DONE)) {
 				// sizeWhenDone                | number                      | tr_stat
 				/** 
 				 * Byte count of all the piece data we'll have downloaded when we're done,
@@ -5113,11 +5177,11 @@ XMWebUIPlugin
 				 **/
 				value = core_download.getStats().getSizeExcludingDND();
 
-			} else if (field.equals("startDate")) {
+			} else if (field.equals(FIELD_TORRENT_DATE_STARTED)) {
 				/** When the torrent was last started. */
 				value = stats.getTimeStarted() / 1000;
 
-			} else if (field.equals("status")) {
+			} else if (field.equals(FIELD_TORRENT_STATUS)) {
 
 				value = torrentGet_status(download);
 
@@ -5141,11 +5205,11 @@ XMWebUIPlugin
 				/** Path to torrent **/
 				value = core_download.getTorrentFileName();
 
-			} else if (field.equals("uploadedEver")) {
+			} else if (field.equals(FIELD_TORRENT_UPLOADED_EVER)) {
 				// uploadedEver                | number                      | tr_stat
 				value = stats.getUploaded();
 
-			} else if (field.equals("uploadLimit") || field.equals("speed-limit-up")) {
+			} else if (field.equals("uploadLimit") || field.equals(TR_PREFS_KEY_USPEED_KBps)) {
 				// RPC v5 (alternate is from 'set' prior to v5 -- added for rogue clients)
 
 				/** maximum upload speed (KBps) */
@@ -5153,18 +5217,18 @@ XMWebUIPlugin
 				value = bps <= 0 ? bps : (bps < 1024 ? 1 : bps / 1024);
 
 			} else if (field.equals("uploadLimited")
-					|| field.equals("speed-limit-up-enabled")) {
+					|| field.equals(TR_PREFS_KEY_USPEED_ENABLED)) {
 				// RPC v5 (alternate is from 'set' prior to v5 -- added for rogue clients)
 
 				/** true if "uploadLimit" is honored */
 				value = download.getUploadRateLimitBytesPerSecond() > 0;
 
-			} else if (field.equals("uploadRatio")) {
+			} else if (field.equals(FIELD_TORRENT_UPLOAD_RATIO)) {
 				// uploadRatio                 | double                      | tr_stat
 				int shareRatio = stats.getShareRatio();
 				value = shareRatio <=0 ? shareRatio : stats.getShareRatio() / 1000.0;
 
-			} else if (field.equals("wanted")) {
+			} else if (field.equals(FIELD_TORRENT_WANTED)) {
 
 				value = torrentGet_wanted(download);
 
@@ -5258,7 +5322,7 @@ XMWebUIPlugin
 			} else if (field.equals("peersKnown")) {
 				// RPC < v13 -- Not Supported -- ignore
 
-			} else if (field.equals("fileCount")) {
+			} else if (field.equals(FIELD_TORRENT_FILE_COUNT)) {
 				// azRPC
 
 				value = core_download.getNumFileInfos();
@@ -5308,7 +5372,7 @@ XMWebUIPlugin
 				 */
 			} else if (field.equals("tag-uids")) {
 				// azRPC
-				List<Long> listTags = new ArrayList<Long>();
+				List<Long> listTags = new ArrayList<>();
 				
 				TagManager tm = TagManagerFactory.getTagManager();
 				
@@ -5366,7 +5430,7 @@ XMWebUIPlugin
 		boolean	is_magnet_download = download_stub instanceof MagnetDownload;
 		
 		long 	status		= 0;
-		long 	error 		= TransmissionVars.TR_STAT_OK;
+		long 	error 		= TR_STAT_OK;
 		String 	error_str 	= "";
 		String	created_by	= "";
 		long	create_date	= 0;
@@ -5405,7 +5469,7 @@ XMWebUIPlugin
 				
 				status		= 0;
 				
-				error 		= TransmissionVars.TR_STAT_LOCAL_ERROR;
+				error 		= TR_STAT_LOCAL_ERROR;
 				
 				Throwable temp = e;
 				
@@ -5473,61 +5537,62 @@ XMWebUIPlugin
 			
 		
 		//System.out.println( fields );
-		
+
+		// @formatter:off
 		Object[][] stub_defs = {
-		{ "activityDate", 0 },
+		{ FIELD_TORRENT_DATE_ACTIVITY, 0 },
 		{ "activityDateRelative",0 },
-		{ "addedDate", is_magnet_download?create_date:0 },
-		{ "comment", is_magnet_download?"Metadata Download": "Download Archived" },
+		{ FIELD_TORRENT_DATE_ADDED, is_magnet_download?create_date:0 },
+		{ FIELD_TORRENT_COMMENT, is_magnet_download?"Metadata Download": "Download Archived" },
 		{ "corruptEver", 0 },
-		{ "creator", created_by },
+		{ FIELD_TORRENT_CREATOR, created_by },
 		{ "dateCreated", create_date },
 		{ "desiredAvailable", 0 },
 		//{ "downloadDir", "" },
-		{ "downloadedEver", 0 },
-		{ "error", error },
-		{ "errorString", error_str },
-		{ "eta", TransmissionVars.TR_ETA_NOT_AVAIL },
+		{ FIELD_TORRENT_DOWNLOADED_EVER, 0 },
+		{ FIELD_TORRENT_ERROR, error },
+		{ FIELD_TORRENT_ERROR_STRING, error_str },
+		{ "eta", TR_ETA_NOT_AVAIL },
 		//{ "fileStats", "" },
 		//{ "files", "" },
-		//{ TransmissionVars.FIELD_TORRENT_HASH, "" },
+		//{ FIELD_TORRENT_HASH, "" },
 		{ "haveUnchecked", 0 },
 		//{ "haveValid", "" },
 		//{ "id", "" },
 		{ "isFinished", is_magnet_download?false:true },
 		{ "isPrivate", false },
 		{ "isStalled", false },
-		{ "leftUntilDone", is_magnet_download?size:0 },	// leftUntilDone is used to mark downloads as incomplete
+		{ FIELD_TORRENT_LEFT_UNTIL_DONE, is_magnet_download?size:0 },	// leftUntilDone is used to mark downloads as incomplete
 		{ "metadataPercentComplete",md_comp },
 		//{ "name", "" },
-		{ "peers", new ArrayList() },
+		{ FIELD_TORRENT_PEERS, new ArrayList() },
 		{ "peersConnected", 0 },
 		{ "peersGettingFromUs", 0 },
 		{ "peersSendingToUs", "" },
-		{ "percentDone", is_magnet_download?0.0f:100.0f },
+		{ FIELD_TORRENT_PERCENT_DONE, is_magnet_download?0.0f:100.0f },
 		{ "pieceCount", 1 },
 		{ "pieceSize", size==0?1:size },
-		{ "queuePosition", 0 },
-		{ "rateDownload", 0 },
-		{ "rateUpload", 0 },
+		{ FIELD_TORRENT_POSITION, 0 },
+		{ FIELD_TORRENT_RATE_DOWNLOAD, 0 },
+		{ FIELD_TORRENT_RATE_UPLOAD, 0 },
 		{ "recheckProgress", 0.0f },
 		{ "seedRatioLimit", 1.0f },
-		{ "seedRatioMode", TransmissionVars.TR_RATIOLIMIT_GLOBAL },
+		{ "seedRatioMode", TR_RATIOLIMIT_GLOBAL },
 		//{ "sizeWhenDone", "" },
-		{ "startDate", is_magnet_download?create_date:0 },
-		{ "status", status },
+		{ FIELD_TORRENT_DATE_STARTED, is_magnet_download?create_date:0 },
+		{ FIELD_TORRENT_STATUS, status },
 		//{ "totalSize", "" },
 		{ "trackerStats", new ArrayList() },
 		{ "trackers", new ArrayList() },
-		{ "uploadRatio", 0.0f },
-		{ "uploadedEver", 0 },
+		{ FIELD_TORRENT_UPLOAD_RATIO, 0.0f },
+		{ FIELD_TORRENT_UPLOADED_EVER, 0 },
 		{ "webseedsSendingToUs", 0 },
 		{ "torrentFile", "" }
 		};
+		// @formatter:on
 		
 		
-		
-		Map<String,Object>	stub_def_map = new HashMap<String, Object>();
+		Map<String,Object>	stub_def_map = new HashMap<>();
 		
 		for ( Object[] d: stub_defs ){
 			stub_def_map.put( (String)d[0], d[1] );
@@ -5541,27 +5606,27 @@ XMWebUIPlugin
 				
 				value = download_id;
 				
-			}else if ( field.equals( "downloadDir" )){
+			}else if ( field.equals(FIELD_TORRENT_DOWNLOAD_DIR)){
 									
 				value = download_stub.getSavePath();
 					
-			}else if ( field.equals( "files" )){
+			}else if ( field.equals(FIELD_TORRENT_FILES)){
 
 				String host = (String)request.getHeaders().get( "host" );
 
 				value = torrentGet_files_stub(host, download_stub, download_id,
 						file_fields, args);
 
-			}else if ( field.equals( "fileCount" )){
+			}else if ( field.equals(FIELD_TORRENT_FILE_COUNT)){
 
 				value = download_stub.getStubFiles().length;
 
-			}else if ( field.equals( "fileStats" )){
+			}else if ( field.equals(FIELD_TORRENT_FILESTATS)){
 				// RPC v5
 
 				value = torrentGet_fileStats_stub(download_stub, file_fields, args);
 
-			}else if ( field.equals( TransmissionVars.FIELD_TORRENT_HASH )){
+			}else if ( field.equals( FIELD_TORRENT_HASH_STRING )){
 				
 				value = ByteFormatter.encodeString( download_stub.getTorrentHash());
 				
@@ -5569,11 +5634,11 @@ XMWebUIPlugin
 
 				value = is_magnet_download?0:size;
 			
-			}else if ( field.equals( "name" )){
+			}else if ( field.equals(FIELD_TORRENT_NAME)){
 
 				value = download_stub.getName();
 				
-			}else if ( field.equals( "sizeWhenDone" )){
+			}else if ( field.equals(FIELD_TORRENT_SIZE_WHEN_DONE)){
 
 				value = size;
 				
@@ -5802,7 +5867,7 @@ XMWebUIPlugin
     // | fromPex                 | number     | tr_stat
     // | fromTracker             | number     | tr_stat
 
-		Map<String, Long> mapPeersFrom = new HashMap<String, Long>();
+		Map<String, Long> mapPeersFrom = new HashMap<>();
 
 		if (pm == null) {
 			return mapPeersFrom;
@@ -5886,17 +5951,17 @@ XMWebUIPlugin
 			//long eta_secs = stats.getETASecs();
 			
 			if (eta_secs == -1) {
-				value = TransmissionVars.TR_ETA_NOT_AVAIL;
+				value = TR_ETA_NOT_AVAIL;
 			} else if (eta_secs >= 315360000000L) {
-				value = TransmissionVars.TR_ETA_UNKNOWN;
+				value = TR_ETA_UNKNOWN;
 			} else {
 				value = eta_secs;
 			}
 		} else if (state == Download.ST_SEEDING) {
 			// TODO: secs left until SR met
-			value = TransmissionVars.TR_ETA_NOT_AVAIL;
+			value = TR_ETA_NOT_AVAIL;
 		} else {
-			value = TransmissionVars.TR_ETA_NOT_AVAIL;
+			value = TR_ETA_NOT_AVAIL;
 		}
 		
 		return value;
@@ -5917,7 +5982,7 @@ XMWebUIPlugin
 	    	statusString = "";
 	    }
 
-	    Map<String, Object> map = new HashMap<String, Object>();
+	    Map<String, Object> map = new HashMap<>();
       //trackers           | array of objects, each containing:   |
       //+-------------------------+------------+
       //| announce                | string     | tr_tracker_info
@@ -5968,7 +6033,7 @@ XMWebUIPlugin
 	    	statusString = "";
 	    }
 
-	    Map<String, Object> map = new HashMap<String, Object>( 64 );
+	    Map<String, Object> map = new HashMap<>(64);
 			
 	    /* how many downloads this tracker knows of (-1 means it does not know) */
 	    map.put("downloadCount", -1); // TODO
@@ -6003,13 +6068,13 @@ XMWebUIPlugin
 	    int status = tps.getStatus();
 	    int state;
 	    if (status == tps.ST_AVAILABLE || status == tps.ST_ONLINE) {
-	    	state = TransmissionVars.TR_TRACKER_WAITING;
+	    	state = TR_TRACKER_WAITING;
 	    } else if (status == tps.ST_UPDATING) {
-	    	state = TransmissionVars.TR_TRACKER_ACTIVE; 
+	    	state = TR_TRACKER_ACTIVE; 
 	    } else if (status == tps.ST_QUEUED) {
-	    	state = TransmissionVars.TR_TRACKER_QUEUED; 
+	    	state = TR_TRACKER_QUEUED; 
 	    } else {
-	    	state = TransmissionVars.TR_TRACKER_INACTIVE;
+	    	state = TR_TRACKER_INACTIVE;
 	    }
 	    map.put("announceState", state);
 
@@ -6190,7 +6255,7 @@ XMWebUIPlugin
     // | an array of tr_info.fileCount        | tr_info
     // | 'booleans' true if the corresponding |
     // | file is to be downloaded.            |
-		List<Object> list = new ArrayList<Object>();
+		List<Object> list = new ArrayList<>();
 		
 		DiskManagerFileInfo[] files = download.getDiskManagerFileInfo();
 		
@@ -6212,7 +6277,7 @@ XMWebUIPlugin
     // | bytesCompleted          | number     | tr_torrent
     // | wanted                  | boolean    | tr_info
     // | priority                | number     | tr_info
-		List<Map> stats_list = new ArrayList<Map>();
+		List<Map> stats_list = new ArrayList<>();
 		
 		DiskManagerFileInfo[] files = download.getDiskManagerFileInfo();
 		
@@ -6257,7 +6322,7 @@ XMWebUIPlugin
 	{
 		DownloadStubFile[] stubFiles = download_stub.getStubFiles();
 		
-		List<Map>	stats_list = new ArrayList<Map>();
+		List<Map>	stats_list = new ArrayList<>();
 	
 		for (int i = 0; i < stubFiles.length; i++) {
 			
@@ -6312,7 +6377,7 @@ XMWebUIPlugin
 		// | index                   | number
 		// | hc                      | number     | hashcode to be later used to supress return of file map
 
-		List<Map> file_list = new ArrayList<Map>();
+		List<Map> file_list = new ArrayList<>();
 
 		// Skip files that match these hashcodes
 		List listHCs = MapUtils.getMapList(args, "files-hc-" + download_id, null);
@@ -6329,7 +6394,7 @@ XMWebUIPlugin
   			
 				TreeMap map = new TreeMap();
   			
-				map.put("index", i);
+				map.put(FIELD_FILES_INDEX, i);
 
   			torrentGet_files(map, file_fields, host, baseURL, download, file);
   			if (file_fields != null && file_fields.size() > 0) {
@@ -6345,9 +6410,9 @@ XMWebUIPlugin
 					continue;
 				}
 
-				TreeMap<String, Object> map = new TreeMap<String, Object>();
+				TreeMap<String, Object> map = new TreeMap<>();
 
-				map.put("index", file_index);
+				map.put(FIELD_FILES_INDEX, file_index);
 				DiskManagerFileInfo fileInfo = files[file_index];
 				torrentGet_fileStats(map, file_fields, fileInfo);
 				torrentGet_files(map, file_fields, host, baseURL, download, fileInfo);
@@ -6424,7 +6489,7 @@ XMWebUIPlugin
 	{
 		DownloadStubFile[] stubFiles = download_stub.getStubFiles();
 		
-		List<Map>	file_list = new ArrayList<Map>();
+		List<Map>	file_list = new ArrayList<>();
 
 		// Skip files that match these hashcodes
 		List listHCs = MapUtils.getMapList(args, "files-hc" + download_id, null);
@@ -6438,7 +6503,7 @@ XMWebUIPlugin
   		
 				TreeMap	map = new TreeMap();
   			
-				map.put("index", i);
+				map.put(FIELD_FILES_INDEX, i);
 
   			torrentGet_file_stub(map, file_fields, host, sf);
   			if (file_fields != null && file_fields.size() > 0) {
@@ -6454,11 +6519,11 @@ XMWebUIPlugin
 					continue;
 				}
 
-				TreeMap<String, Object> map = new TreeMap<String, Object>();
+				TreeMap<String, Object> map = new TreeMap<>();
 
 				file_list.add(map);
 
-				map.put("index", file_index);
+				map.put(FIELD_FILES_INDEX, file_index);
 				DownloadStubFile file = stubFiles[file_index];
 				torrentGet_fileStats_stub(map, file_fields, file);
 				torrentGet_file_stub(map, file_fields, host, file);
@@ -6562,7 +6627,7 @@ XMWebUIPlugin
 		String str = download.getErrorStateDetails();
 		
 		if ( str != null && str.length() > 0 ){
-			value = TransmissionVars.TR_STAT_LOCAL_ERROR;
+			value = TR_STAT_LOCAL_ERROR;
 		}else{
 			value = 0;
 			TRTrackerAnnouncer tracker_client = core_download.getTrackerClient();
@@ -6571,7 +6636,7 @@ XMWebUIPlugin
 				TRTrackerAnnouncerResponse x = tracker_client.getBestAnnouncer().getLastResponse();
 				if ( x != null ){
 					if ( x.getStatus() == TRTrackerAnnouncerResponse.ST_REPORTED_ERROR ){
-						value = TransmissionVars.TR_STAT_TRACKER_ERROR;
+						value = TR_STAT_TRACKER_ERROR;
 					}
 				}
 			}else{
@@ -6582,7 +6647,7 @@ XMWebUIPlugin
 						
 						if ( status != null && status.length() > 0 ){
 						
-							value = TransmissionVars.TR_STAT_TRACKER_ERROR;
+							value = TR_STAT_TRACKER_ERROR;
 						}
 					}
 				}
@@ -6683,13 +6748,14 @@ XMWebUIPlugin
 		for (PEPeer peer : peerList) {
 			Map map = new HashMap();
 			peers.add(map);
+
+			final PEPeerStats stats = peer.getStats();
+			boolean isDownloadingFrom = peer.isDownloadPossible() && stats.getDataReceiveRate() > 0;
 			
-			boolean isDownloadingFrom = peer.isDownloadPossible() && peer.getStats().getDataReceiveRate() > 0;
-			
-			map.put("address", peer.getIp());
-			map.put("clientName", peer.getClient());
-			map.put("clientIsChoked", peer.isChokedByMe());
-			map.put("clientIsInterested", peer.isInterested());
+			map.put(FIELD_PEERS_ADDRESS, peer.getIp());
+			map.put(FIELD_PEERS_CLIENT_NAME, peer.getClient());
+			map.put(FIELD_PEERS_CLIENT_CHOKED, peer.isChokedByMe());
+			map.put(FIELD_PEERS_CLIENT_INTERESTED, peer.isInterested());
 
 			// flagStr
       // "O": "Optimistic unchoke"
@@ -6709,7 +6775,7 @@ XMWebUIPlugin
 			if (isDownloadingFrom) {
 				flagStr.append('D');
 			}
-			map.put("flagStr", flagStr.toString());
+			map.put(FIELD_PEERS_FLAGSTR, flagStr.toString());
 
 			// code, name
 			String[] countryDetails = PeerUtils.getCountryDetails(peer);
@@ -6717,20 +6783,20 @@ XMWebUIPlugin
 				map.put("cc", countryDetails[0]);
 			}
 			
-			map.put("isDownloadingFrom", isDownloadingFrom);
+			map.put(FIELD_PEERS_IS_DLING_FROM, isDownloadingFrom);
 			// peer.connection.getTransport().isEncrypted
-			map.put("isEncrypted", !"None".equals(peer.getEncryption()));  // TODO FIX
-			map.put("isIncoming", peer.isIncoming());
-			map.put("isUploadingTo", peer.getStats().getDataSendRate() > 0);
+			map.put(FIELD_PEERS_IS_ENCRYPTED, !"None".equals(peer.getEncryption()));  // TODO FIX
+			map.put(FIELD_PEERS_IS_INCOMING, peer.isIncoming());
+			map.put(FIELD_PEERS_IS_ULING_TO, stats.getDataSendRate() > 0);
 			// RPC v13
-			map.put("isUTP", peer.getProtocol().equals("uTP"));
-			map.put("peerIsChoked", peer.isChokingMe());
-			map.put("peerIsInterested", peer.isInteresting());
+			map.put(FIELD_PEERS_IS_UTP, peer.getProtocol().equals("uTP"));
+			map.put(FIELD_PEERS_PEER_CHOKED, peer.isChokingMe());
+			map.put(FIELD_PEERS_PEER_INTERESTED, peer.isInteresting());
 			// RPC v3
-			map.put("port", peer.getPort());
-			map.put("progress", peer.getPercentDoneInThousandNotation() / 1000.0);
-			map.put("rateToClient", peer.getStats().getDataReceiveRate());
-			map.put("rateToPeer", peer.getStats().getDataSendRate());
+			map.put(FIELD_PEERS_PORT, peer.getPort());
+			map.put(FIELD_PEERS_PROGRESS, peer.getPercentDoneInThousandNotation() / 1000.0);
+			map.put(FIELD_PEERS_RATE_TO_CLIENT_BPS, stats.getDataReceiveRate());
+			map.put(FIELD_PEERS_RATE_TO_PEER_BPS, stats.getDataSendRate());
 		}
 		
 		return peers;
@@ -6756,7 +6822,7 @@ XMWebUIPlugin
 			downloads3 = new MagnetDownload[0];
 		}
 		
-		List<DownloadStub>	result = new ArrayList<DownloadStub>( downloads1.length + downloads2.length + downloads3.length );
+		List<DownloadStub>	result = new ArrayList<>(downloads1.length + downloads2.length + downloads3.length);
 		
 		result.addAll( Arrays.asList( downloads1 ));
 		result.addAll( Arrays.asList( downloads2 ));
@@ -6771,12 +6837,12 @@ XMWebUIPlugin
 		Object		ids,
 		boolean		include_magnet_dowloads )
 	{
-		List<DownloadStub>	downloads = new ArrayList<DownloadStub>();
+		List<DownloadStub>	downloads = new ArrayList<>();
 		
 		List<DownloadStub> 	all_downloads = getAllDownloads( include_magnet_dowloads );
 
-		List<Long>		selected_ids 	= new ArrayList<Long>();
-		List<String>	selected_hashes = new ArrayList<String>();
+		List<Long>		selected_ids 	= new ArrayList<>();
+		List<String>	selected_hashes = new ArrayList<>();
 		
 		if ( ids == null ){
 			
@@ -6909,7 +6975,7 @@ XMWebUIPlugin
 	{
 		List<DownloadStub> downloads = getDownloads(ids,false);
 		
-		ArrayList<DownloadManager> list = new ArrayList<DownloadManager>(downloads.size());
+		ArrayList<DownloadManager> list = new ArrayList<>(downloads.size());
 
 		for ( DownloadStub downloadStub: downloads ){
 			
@@ -6985,9 +7051,9 @@ XMWebUIPlugin
 				
 				List<DownloadStub> all_downloads = getAllDownloads( true );
 
-				Set<Long>	all_ids = new HashSet<Long>();
+				Set<Long>	all_ids = new HashSet<>();
 				
-				List<DownloadStub>	dups = new ArrayList<DownloadStub>();
+				List<DownloadStub>	dups = new ArrayList<>();
 				
 				long	max_id = 0;
 				
@@ -7070,7 +7136,7 @@ XMWebUIPlugin
 				
 		List<DownloadStub>	downloads = getDownloads( ids, true );
 				
-		List<Map>	torrents = new ArrayList<Map>( downloads.size());
+		List<Map>	torrents = new ArrayList<>(downloads.size());
 		
 		result.put( "torrents", torrents );
 		
@@ -7080,7 +7146,7 @@ XMWebUIPlugin
 		
 		for ( DownloadStub download_stub: downloads ){
 						
-			Map<String,Object>	torrent = new HashMap<String, Object>();
+			Map<String,Object>	torrent = new HashMap<>();
 			
 			torrents.add( torrent );
 			
@@ -7858,7 +7924,7 @@ XMWebUIPlugin
 		private byte[]			hash;
 		private long			create_time;
 		
-		private Map<TorrentAttribute,Long>	attributes = new HashMap<TorrentAttribute, Long>();
+		private Map<TorrentAttribute,Long>	attributes = new HashMap<>();
 		
 		private String temp_dir = AETemporaryFileHandler.getTempDirectory().getAbsolutePath();
 		
@@ -7884,7 +7950,7 @@ XMWebUIPlugin
 			
 			String[]	args = str.split( "&" );
 
-			Map<String,String>	arg_map = new HashMap<String,String>();
+			Map<String,String>	arg_map = new HashMap<>();
 			
 			for ( String arg: args ){
 				
