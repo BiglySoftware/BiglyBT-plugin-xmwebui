@@ -5086,6 +5086,7 @@ XMWebUIPlugin
 			} else if (field.equals("maxConnectedPeers")) {
 				// maxConnectedPeers           | number                      | tr_torrent
 				// TODO: Some sort of Peer Limit (tr_torrentSetPeerLimit )
+				value = 0;
 
 			} else if (field.equals("metadataPercentComplete")) {
 				// RPC v7: TODO
