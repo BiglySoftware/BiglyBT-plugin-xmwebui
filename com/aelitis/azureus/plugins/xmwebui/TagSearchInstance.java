@@ -104,7 +104,7 @@ public class TagSearchInstance
 			synchronized (mapTags) {
 				for (String hash : mapTags.keySet()) {
 					Map<String, Object> map = new HashMap<String, Object>();
-					map.put(TransmissionVars.FIELD_TORRENT_HASH, hash);
+					map.put(TransmissionVars.FIELD_TORRENT_HASH_STRING, hash);
 					map.put("tags", new ArrayList<String>(mapTags.get(hash)));
 					torrentList.add(map);
 				}
