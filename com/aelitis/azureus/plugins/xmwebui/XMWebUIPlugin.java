@@ -30,6 +30,7 @@ import com.biglybt.core.CoreFactory;
 import com.biglybt.core.category.Category;
 import com.biglybt.core.category.CategoryManager;
 import com.biglybt.core.config.COConfigurationManager;
+import com.biglybt.core.config.impl.ConfigurationDefaults;
 import com.biglybt.core.config.impl.TransferSpeedValidator;
 import com.biglybt.core.disk.DiskManager;
 import com.biglybt.core.disk.DiskManagerPiece;
@@ -206,8 +207,9 @@ XMWebUIPlugin
 	
 	/**
 	 * 5: No longer xml escapes strings when user agent does not start with "Mozilla/"
+	 * 6: handle more of session-set
 	 */
-	private static final int VUZE_RPC_VERSION = 5;
+	private static final int VUZE_RPC_VERSION = 6;
 	
 	private static Download
 	destubbify(
@@ -2794,7 +2796,8 @@ XMWebUIPlugin
     result.put(TR_PREFS_KEY_LPD_ENABLED, false );
     result.put(TR_PREFS_KEY_DOWNLOAD_DIR, save_dir);
     // RPC 12 to 14
-    result.put("download-dir-free-space", -1);
+		long space = save_dir == null ? -1 : FileUtil.getUsableSpace(new File(save_dir));
+		result.put(TR_PREFS_KEY_DOWNLOAD_DIR_FREE_SPACE, space);
 
     result.put(TR_PREFS_KEY_DSPEED_KBps, down_limit > 0 ? down_limit : pc.getUnsafeIntParameter("config.ui.speed.partitions.manual.download.last"));
     result.put(TR_PREFS_KEY_DSPEED_ENABLED, down_limit != 0 );
@@ -2804,12 +2807,14 @@ XMWebUIPlugin
     result.put(TR_PREFS_KEY_INCOMPLETE_DIR, save_dir );
     result.put(TR_PREFS_KEY_INCOMPLETE_DIR_ENABLED, false );//TODO
     //result.put(TR_PREFS_KEY_MSGLEVEL, TR_MSG_INF ); // Not in Spec
-    result.put(TR_PREFS_KEY_DOWNLOAD_QUEUE_SIZE, 5 );//TODO
-    result.put(TR_PREFS_KEY_DOWNLOAD_QUEUE_ENABLED, true ); //TODO
+
+		final int maxDownloads = pc.getCoreIntParameter(PluginConfig.CORE_PARAM_INT_MAX_DOWNLOADS);
+		result.put(TR_PREFS_KEY_DOWNLOAD_QUEUE_SIZE, maxDownloads );
+    result.put(TR_PREFS_KEY_DOWNLOAD_QUEUE_ENABLED, maxDownloads > 0 );
     result.put(TR_PREFS_KEY_PEER_LIMIT_GLOBAL, glob_con );
     result.put(TR_PREFS_KEY_PEER_LIMIT_TORRENT, tor_con );
     result.put(TR_PREFS_KEY_PEER_PORT, tcp_port );
-    result.put(TR_PREFS_KEY_PEER_PORT_RANDOM_ON_START, false ); //TODO
+    result.put(TR_PREFS_KEY_PEER_PORT_RANDOM_ON_START, pc.getUnsafeBooleanParameter("Listen.Port.Randomize.Enable"));
     //result.put(TR_PREFS_KEY_PEER_PORT_RANDOM_LOW, 49152 ); // Not in Spec
     //result.put(TR_PREFS_KEY_PEER_PORT_RANDOM_HIGH, 65535 ); // Not in Spec
     //result.put(TR_PREFS_KEY_PEER_SOCKET_TOS, TR_DEFAULT_PEER_SOCKET_TOS_STR ); //TODO
@@ -2835,8 +2840,13 @@ XMWebUIPlugin
     //result.put(TR_PREFS_KEY_SCRAPE_PAUSED_TORRENTS, true ); // Not in Spec
     result.put(TR_PREFS_KEY_SCRIPT_TORRENT_DONE_FILENAME, "" ); //TODO
     result.put(TR_PREFS_KEY_SCRIPT_TORRENT_DONE_ENABLED, false ); //TODO
-    result.put(TR_PREFS_KEY_SEED_QUEUE_SIZE, 10 ); //TODO
-    result.put(TR_PREFS_KEY_SEED_QUEUE_ENABLED, false ); //TODO
+
+		final int maxActive = pc.getCoreIntParameter(PluginConfig.CORE_PARAM_INT_MAX_ACTIVE);
+		final int maxSeedsSortOf = maxDownloads - maxActive;
+		result.put(TR_PREFS_KEY_SEED_QUEUE_SIZE, maxSeedsSortOf );
+    result.put(TR_PREFS_KEY_SEED_QUEUE_ENABLED, true );
+		result.put(TR_PREFS_KEY_ACTIVE_QUEUE_SIZE, maxActive );
+
     result.put(TR_PREFS_KEY_ALT_SPEED_ENABLED, false ); //TODO
     result.put(TR_PREFS_KEY_ALT_SPEED_UP_KBps, 50 );  //TODO
     result.put(TR_PREFS_KEY_ALT_SPEED_DOWN_KBps, 50 );  //TODO
@@ -2895,7 +2905,8 @@ XMWebUIPlugin
 				"method:subscription-remove", "method:subscription-set",
 				"method:vuze-plugin-get-list", "method:tags-lookup-start",
 				"method:tags-lookup-get-results", "method:vuze-search-start",
-				"method:vuze-search-get-results", "torrent-add:torrent-duplicate");
+				"method:vuze-search-get-results", "torrent-add:torrent-duplicate",
+				"field:session:active-queue-size");
 
 		synchronized( json_server_method_lock ){
   		for (String key : json_server_methods.keySet()) {
@@ -3061,12 +3072,36 @@ XMWebUIPlugin
 								PluginConfig.CORE_PARAM_STRING_DEFAULT_SAVE_PATH, dir);
 					}
 
-				} else if (key.equals("")) {
+				} else if (key.equals(TR_PREFS_KEY_DOWNLOAD_QUEUE_SIZE)) {
+					final int maxActive = pc.getCoreIntParameter(PluginConfig.CORE_PARAM_INT_MAX_ACTIVE);
+					int newMaxDL = getNumber(val).intValue();
+					if (newMaxDL > maxActive) {
+						pc.setCoreIntParameter(PluginConfig.CORE_PARAM_INT_MAX_ACTIVE, newMaxDL);
+					}
+					pc.setCoreIntParameter(PluginConfig.CORE_PARAM_INT_MAX_DOWNLOADS, newMaxDL);
 
-				} else if (key.equals("")) {
-				} else if (key.equals("")) {
-				} else if (key.equals("")) {
-				} else if (key.equals("")) {
+				} else if (key.equals(TR_PREFS_KEY_DOWNLOAD_QUEUE_ENABLED)) {
+					int max = getBoolean(val) ? ConfigurationDefaults.getInstance().getIntParameter("max downloads") : 0;
+					pc.setCoreIntParameter(PluginConfig.CORE_PARAM_INT_MAX_DOWNLOADS, max);
+					
+				} else if (key.equals(TR_PREFS_KEY_SEED_QUEUE_SIZE)) {
+					int maxSeeds = getNumber(val).intValue();
+
+					final int maxActive = pc.getCoreIntParameter(PluginConfig.CORE_PARAM_INT_MAX_ACTIVE);
+					int newMax = maxActive - maxSeeds;
+					if (newMax < 0) {
+						pc.setCoreIntParameter(PluginConfig.CORE_PARAM_INT_MAX_ACTIVE, maxSeeds);
+					} else {
+						pc.setCoreIntParameter(PluginConfig.CORE_PARAM_INT_MAX_ACTIVE, newMax);
+					}
+					
+				} else if (key.equals(TR_PREFS_KEY_SEED_QUEUE_ENABLED)) {
+					// TODO
+
+				} else if (key.equals(TR_PREFS_KEY_ACTIVE_QUEUE_SIZE)) {
+					int maxActive = getNumber(val).intValue();
+					pc.setCoreIntParameter(PluginConfig.CORE_PARAM_INT_MAX_ACTIVE, maxActive);
+					
 				} else if (key.equals("")) {
 				} else if (key.equals("")) {
 				} else if (key.equals(TR_PREFS_KEY_START)) {
@@ -3161,11 +3196,19 @@ XMWebUIPlugin
 					pc.setCoreIntParameter(
 							PluginConfig.CORE_PARAM_INT_MAX_UPLOAD_SPEED_SEEDING_KBYTES_PER_SEC,
 							limit);
-				} else if (key.equals("peer-port") || key.equals("port")) {
+				} else if (key.equals(TransmissionVars.TR_PREFS_KEY_PEER_PORT_RANDOM_ON_START)) {
+
+					boolean random = getBoolean(val);
+
+					pc.setUnsafeBooleanParameter("Listen.Port.Randomize.Enable", random);
+					
+				} else if (key.equals(TransmissionVars.TR_PREFS_KEY_PEER_PORT) || key.equals("port")) {
 
 					int port = getNumber(val).intValue();
-
+					
 					pc.setCoreIntParameter(PluginConfig.CORE_PARAM_INT_INCOMING_TCP_PORT,
+							port);
+					pc.setCoreIntParameter(PluginConfig.CORE_PARAM_INT_INCOMING_UDP_PORT,
 							port);
 				} else if (key.equals(TR_PREFS_KEY_ENCRYPTION)) {
 

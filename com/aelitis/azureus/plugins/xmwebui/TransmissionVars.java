@@ -83,6 +83,8 @@ public class TransmissionVars
 
 	public static final String TR_PREFS_KEY_DOWNLOAD_DIR = "download-dir";
 
+	public static final String TR_PREFS_KEY_DOWNLOAD_DIR_FREE_SPACE = "download-dir-free-space";
+
 	public static final String TR_PREFS_KEY_ENCRYPTION = "encryption";
 
 	public static final String TR_PREFS_KEY_IDLE_LIMIT = "idle-seeding-limit";
@@ -144,6 +146,9 @@ public class TransmissionVars
 	public static final String TR_PREFS_KEY_SCRIPT_TORRENT_DONE_FILENAME = "script-torrent-done-filename";
 
 	public static final String TR_PREFS_KEY_SCRIPT_TORRENT_DONE_ENABLED = "script-torrent-done-enabled";
+
+	// BiglyBT only. Max active torrents (download plus seeding)
+	public static final String TR_PREFS_KEY_ACTIVE_QUEUE_SIZE = "active-queue-size";
 
 	public static final String TR_PREFS_KEY_SEED_QUEUE_SIZE = "seed-queue-size";
 
