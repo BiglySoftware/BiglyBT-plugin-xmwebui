@@ -39,6 +39,7 @@ import com.biglybt.core.download.DownloadManagerState;
 import com.biglybt.core.download.DownloadManagerStats;
 import com.biglybt.core.global.GlobalManager;
 import com.biglybt.core.global.GlobalManagerStats;
+import com.biglybt.core.history.DownloadHistoryManager;
 import com.biglybt.core.internat.MessageText;
 import com.biglybt.core.ipfilter.IpFilter;
 import com.biglybt.core.ipfilter.IpFilterManagerFactory;
@@ -59,6 +60,8 @@ import com.biglybt.core.peer.PEPeerSource;
 import com.biglybt.core.peer.PEPeerStats;
 import com.biglybt.core.peer.util.PeerUtils;
 import com.biglybt.core.security.CryptoManager;
+import com.biglybt.core.stats.transfer.OverallStats;
+import com.biglybt.core.stats.transfer.StatsFactory;
 import com.biglybt.core.subs.Subscription;
 import com.biglybt.core.subs.SubscriptionException;
 import com.biglybt.core.subs.SubscriptionHistory;
@@ -3472,23 +3475,38 @@ XMWebUIPlugin
 				ratio = ((float) sent) / received;
 			}
 
+			// Not sure where "ratio" comes from, as it's not in the spec
 			current_stats.put("ratio", ratio);
-			current_stats.put("secondsActive", 0); // TODO
+
+			OverallStats totalStats = StatsFactory.getStats();
+
+			current_stats.put("secondsActive", totalStats.getSessionUpTime());
+			current_stats.put("filesAdded", 0);
 		}
 
 
 		if (all
 				|| Collections.binarySearch(fields, TR_SESSION_STATS_CUMULATIVE) >= 0) {
 			// RPC v4
+			OverallStats totalStats = StatsFactory.getStats();
+
 			Map cumulative_stats = new HashMap();
 			result.put(TR_SESSION_STATS_CUMULATIVE, cumulative_stats);
 
-			// TODO: ALL!
-			cumulative_stats.put("uploadedBytes", 0);
-			cumulative_stats.put("downloadedBytes", 0);
-			cumulative_stats.put("ratio", 0);
-			cumulative_stats.put("secondsActive", 0);
-			cumulative_stats.put("sessionCount", 0);
+			cumulative_stats.put("uploadedBytes", totalStats.getUploadedBytes());
+			cumulative_stats.put("downloadedBytes", totalStats.getDownloadedBytes());
+
+			long filesAdded = 0;
+			final Object downloadHistoryManager = gm.getDownloadHistoryManager();
+			if (downloadHistoryManager instanceof DownloadHistoryManager) {
+				filesAdded = ((DownloadHistoryManager) downloadHistoryManager).getHistoryCount();
+			}
+			cumulative_stats.put("filesAdded", filesAdded);
+			cumulative_stats.put("secondsActive", totalStats.getTotalUpTime());
+
+			// Closest thing we have is # of times locale is set (set at startup, or when user changes languages)
+			long sessionCount = COConfigurationManager.getIntParameter("locale.set.complete.count");
+			cumulative_stats.put("sessionCount", sessionCount);
 		}
 	}
 
