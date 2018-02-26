@@ -5878,7 +5878,7 @@ XMWebUIPlugin
 	}
 
 	private Object torrentGet_pieces(DownloadManager core_download) {
-  	Object value = null;
+  	Object value = "";
 
 		// TODO: No idea if this works
 		// pieces | string             
