@@ -895,7 +895,7 @@ XMWebUIPlugin
 			// This is the actual spec for massing session-id
 			response.setHeader("X-Transmission-Session-Id", session_id );
 
-			if (!isSessionValid(request)) {
+			if (!isSessionValid(request, true)) {
 				log("Header:\n" + request.getHeader());
 				LineNumberReader lnr;
 				if ("gzip".equals(request.getHeaders().get("content-encoding"))) {
@@ -930,7 +930,10 @@ XMWebUIPlugin
 		
 			//System.out.println( "Header: " + request.getHeader() );
 			
-			if ( url.equals( "/transmission/rpc" )){
+			// "/rpc" added because some webuis assume they are at /transmission/web/index.html
+			//  and use a relative url of "../rpc" to get to /transmission/rpc.
+			// We publish to root (so, "/index.html"), or ../rpc results in /rpc
+			if ( url.equals( "/transmission/rpc" ) || url.equals("/rpc")){
 				
 				LineNumberReader lnr;
 				if ("gzip".equals(request.getHeaders().get("content-encoding"))) {
@@ -958,9 +961,15 @@ XMWebUIPlugin
 				
 					log( "-> " + request_json_str );
 				}
-				
+
+				if (request_json_str.length() == 0 && !isSessionValid(request, false)) {
+					// Some clients call /transmission/rpc with no params to get the X-Transmission-Session-Id
+					response.setReplyStatus( 409 );
+					return true;
+				}
+
 				Map request_json = JSONUtils.decodeJSON( request_json_str.toString());
-								
+
 				Map response_json = processRequest( request, session_id_plus, request_json );
 
 				String response_json_str = JSONUtils.encodeToJSON( response_json );
@@ -1251,7 +1260,8 @@ XMWebUIPlugin
 
 	private boolean 
 	isSessionValid(
-			TrackerWebPageRequest request) 
+			TrackerWebPageRequest request,
+			boolean checkCookie) 
  {
 		if (!request.getURL().startsWith("/transmission/")) {
 			return true;
@@ -1273,7 +1283,7 @@ XMWebUIPlugin
 			header_session_id = (String) headers.get(
 					"x-transmission-session-id");
 		}
-		if (header_session_id == null) {
+		if (header_session_id == null && checkCookie) {
 			header_session_id = getCookie(
 					(String) headers.get("cookie"),
 					"X-Transmission-Session-Id");
