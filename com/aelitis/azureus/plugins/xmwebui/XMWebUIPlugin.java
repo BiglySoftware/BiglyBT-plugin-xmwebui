@@ -911,6 +911,7 @@ XMWebUIPlugin
 					}
 					log("409: " + line);
 				}
+				lnr.close();
 				response.setReplyStatus( 409 );
 				response.getOutputStream().write("You_didn_t_set_the_X-Transmission-Session-Id".getBytes());
 				return true;
@@ -961,6 +962,8 @@ XMWebUIPlugin
 				
 					log( "-> " + request_json_str );
 				}
+				
+				lnr.close();
 
 				if (request_json_str.length() == 0 && !isSessionValid(request, false)) {
 					// Some clients call /transmission/rpc with no params to get the X-Transmission-Session-Id

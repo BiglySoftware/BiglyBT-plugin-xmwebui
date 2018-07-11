@@ -517,6 +517,17 @@
                                     | memory-bytes | number | number of bytes in a KB (1000 for kB; 1024 for KiB)
                                     +--------------+--------+------------------+
 
+   >>> BiglyBT
+   "rpc-supports"                   | array of string | various features remote client supports
+                                    |                 | "method:X" supports rpc method X
+                                    |                 | "method:X" supports rpc method X
+   "biglybt-version"
+   "rpc-i2p-address"
+   "rpc-tor-address"
+   "az-content-port"
+   "az-rpc-version"
+   <<< BiglyBT
+
    "rpc-version" indicates the RPC interface version supported by the RPC server.
    It is incremented when a new version of Transmission changes the RPC interface.
 
