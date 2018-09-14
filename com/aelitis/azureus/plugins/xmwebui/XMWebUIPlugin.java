@@ -22,6 +22,25 @@
 
 package com.aelitis.azureus.plugins.xmwebui;
 
+import static com.aelitis.azureus.plugins.xmwebui.TransmissionVars.*;
+
+import java.io.*;
+import java.net.MalformedURLException;
+import java.net.URI;
+import java.net.URL;
+import java.net.URLDecoder;
+import java.text.DateFormat;
+import java.text.NumberFormat;
+import java.text.ParseException;
+import java.util.*;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+import java.util.zip.GZIPInputStream;
+
+import org.gudy.bouncycastle.util.encoders.Base64;
+import org.json.simple.JSONObject;
+import org.json.simple.JSONValue;
+
 import com.aelitis.azureus.plugins.remsearch.RemSearchPluginPageGenerator;
 import com.aelitis.azureus.plugins.remsearch.RemSearchPluginPageGeneratorAdaptor;
 import com.aelitis.azureus.plugins.remsearch.RemSearchPluginSearch;
@@ -46,11 +65,7 @@ import com.biglybt.core.ipfilter.IpFilterManagerFactory;
 import com.biglybt.core.ipfilter.impl.IpFilterAutoLoaderImpl;
 import com.biglybt.core.logging.LogAlert;
 import com.biglybt.core.logging.Logger;
-import com.biglybt.core.metasearch.Engine;
-import com.biglybt.core.metasearch.MetaSearch;
-import com.biglybt.core.metasearch.MetaSearchManager;
-import com.biglybt.core.metasearch.MetaSearchManagerFactory;
-import com.biglybt.core.metasearch.SearchParameter;
+import com.biglybt.core.metasearch.*;
 import com.biglybt.core.metasearch.impl.web.WebEngine;
 import com.biglybt.core.pairing.PairingManager;
 import com.biglybt.core.pairing.PairingManagerFactory;
@@ -62,12 +77,7 @@ import com.biglybt.core.peer.util.PeerUtils;
 import com.biglybt.core.security.CryptoManager;
 import com.biglybt.core.stats.transfer.OverallStats;
 import com.biglybt.core.stats.transfer.StatsFactory;
-import com.biglybt.core.subs.Subscription;
-import com.biglybt.core.subs.SubscriptionException;
-import com.biglybt.core.subs.SubscriptionHistory;
-import com.biglybt.core.subs.SubscriptionManager;
-import com.biglybt.core.subs.SubscriptionManagerFactory;
-import com.biglybt.core.subs.SubscriptionResult;
+import com.biglybt.core.subs.*;
 import com.biglybt.core.tag.Tag;
 import com.biglybt.core.tag.TagManager;
 import com.biglybt.core.tag.TagManagerFactory;
@@ -79,55 +89,17 @@ import com.biglybt.core.tracker.client.TRTrackerAnnouncer;
 import com.biglybt.core.tracker.client.TRTrackerAnnouncerResponse;
 import com.biglybt.core.tracker.client.TRTrackerScraper;
 import com.biglybt.core.tracker.client.TRTrackerScraperResponse;
-import com.biglybt.core.util.AENetworkClassifier;
-import com.biglybt.core.util.AESemaphore;
-import com.biglybt.core.util.AETemporaryFileHandler;
-import com.biglybt.core.util.AEThread2;
-import com.biglybt.core.util.AEVerifier;
-import com.biglybt.core.util.BDecoder;
-import com.biglybt.core.util.BEncoder;
-import com.biglybt.core.util.Base32;
-import com.biglybt.core.util.ByteFormatter;
-import com.biglybt.core.util.Constants;
-import com.biglybt.core.util.Debug;
-import com.biglybt.core.util.FileUtil;
-import com.biglybt.core.util.MultiPartDecoder;
-import com.biglybt.core.util.RandomUtils;
-import com.biglybt.core.util.SHA1Hasher;
-import com.biglybt.core.util.SimpleTimer;
-import com.biglybt.core.util.SystemTime;
-import com.biglybt.core.util.TimerEvent;
-import com.biglybt.core.util.TimerEventPerformer;
-import com.biglybt.core.util.TimerEventPeriodic;
-import com.biglybt.core.util.TorrentUtils;
-import com.biglybt.core.util.UrlUtils;
+import com.biglybt.core.util.*;
 import com.biglybt.core.versioncheck.VersionCheckClient;
 import com.biglybt.core.vuzefile.VuzeFile;
 import com.biglybt.core.vuzefile.VuzeFileComponent;
 import com.biglybt.core.vuzefile.VuzeFileHandler;
-import com.biglybt.pif.PluginAdapter;
-import com.biglybt.pif.PluginConfig;
-import com.biglybt.pif.PluginEvent;
-import com.biglybt.pif.PluginEventListener;
-import com.biglybt.pif.PluginException;
-import com.biglybt.pif.PluginInterface;
-import com.biglybt.pif.PluginManager;
-import com.biglybt.pif.PluginState;
-import com.biglybt.pif.UnloadablePlugin;
+import com.biglybt.pif.*;
 import com.biglybt.pif.config.ConfigParameter;
 import com.biglybt.pif.config.ConfigParameterListener;
 import com.biglybt.pif.disk.DiskManagerFileInfo;
-import com.biglybt.pif.download.Download;
-import com.biglybt.pif.download.DownloadException;
-import com.biglybt.pif.download.DownloadManagerListener;
-import com.biglybt.pif.download.DownloadRemovalVetoException;
-import com.biglybt.pif.download.DownloadScrapeResult;
-import com.biglybt.pif.download.DownloadStats;
-import com.biglybt.pif.download.DownloadStub;
+import com.biglybt.pif.download.*;
 import com.biglybt.pif.download.DownloadStub.DownloadStubFile;
-import com.biglybt.pif.download.DownloadStubEvent;
-import com.biglybt.pif.download.DownloadStubListener;
-import com.biglybt.pif.download.DownloadWillBeAddedListener;
 import com.biglybt.pif.logging.LoggerChannel;
 import com.biglybt.pif.torrent.Torrent;
 import com.biglybt.pif.torrent.TorrentAttribute;
@@ -137,7 +109,7 @@ import com.biglybt.pif.tracker.web.TrackerWebPageRequest;
 import com.biglybt.pif.tracker.web.TrackerWebPageResponse;
 import com.biglybt.pif.ui.UIInstance;
 import com.biglybt.pif.ui.UIManagerListener;
-import com.biglybt.pif.ui.config.BooleanParameter;
+import com.biglybt.pif.ui.config.*;
 import com.biglybt.pif.ui.model.BasicPluginConfigModel;
 import com.biglybt.pif.update.Update;
 import com.biglybt.pif.update.UpdateCheckInstance;
@@ -157,47 +129,6 @@ import com.biglybt.util.JSONUtils;
 import com.biglybt.util.MapUtils;
 import com.biglybt.util.PlayUtils;
 
-import org.gudy.bouncycastle.util.encoders.Base64;
-import org.json.simple.JSONObject;
-import org.json.simple.JSONValue;
-
-import java.io.File;
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.InputStreamReader;
-import java.io.LineNumberReader;
-import java.io.OutputStreamWriter;
-import java.io.PrintWriter;
-import java.io.UnsupportedEncodingException;
-import java.net.MalformedURLException;
-import java.net.URI;
-import java.net.URL;
-import java.net.URLDecoder;
-import java.text.DateFormat;
-import java.text.NumberFormat;
-import java.text.ParseException;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.Comparator;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Iterator;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Locale;
-import java.util.Map;
-import java.util.Properties;
-import java.util.Set;
-import java.util.SortedMap;
-import java.util.TreeMap;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
-import java.util.zip.GZIPInputStream;
-
-import static com.aelitis.azureus.plugins.xmwebui.TransmissionVars.*;
-
 @SuppressWarnings({
 	"unchecked",
 	"rawtypes"
@@ -210,10 +141,19 @@ XMWebUIPlugin
 	
 	/**
 	 * 5: No longer xml escapes strings when user agent does not start with "Mozilla/"
+	 *
 	 * 6: handle more of session-set
+	 *
+	 * 7: Bandwidth reduction:
+	 *      * files-hc-<id> can now be a single comma delimited string
+	 *      * mapPerFile request flag:
+	 *          true: default. each file returned is a map
+	 *          false: Each file is an ordered array instead of a map.
+	 *                 They keys to the array are sent as "fileKeys"
+	 *    "flagStr" in peers map is mostly implemented
 	 */
-	private static final int VUZE_RPC_VERSION = 6;
-	
+	private static final int VUZE_RPC_VERSION = 7;
+
 	private static Download
 	destubbify(
 		DownloadStub	stub )
@@ -250,7 +190,10 @@ XMWebUIPlugin
     
     BooleanParameter trace_param;
     private BooleanParameter hide_ln_param;
-    
+		private DirectoryParameter webdir_param;
+		private HyperlinkParameter openui_param;
+		private HyperlinkParameter launchAltWebUI_param;
+
     private TorrentAttribute	t_id;
     
     private Map<Long,RecentlyRemovedData>	recently_removed 	= new HashMap<Long,RecentlyRemovedData>();
@@ -348,7 +291,7 @@ XMWebUIPlugin
 		log = plugin_interface.getLogger().getChannel( "xmwebui" );
 		defaults.put(PR_LOG, log);
 
-		PluginConfig pluginconfig = plugin_interface.getPluginconfig();
+		final PluginConfig pluginconfig = plugin_interface.getPluginconfig();
 		
 		if (	!PairingManagerFactory.getSingleton().isEnabled() && 
 				!pluginconfig.hasPluginParameter("Password")
@@ -371,14 +314,37 @@ XMWebUIPlugin
 		
 		t_id = plugin_interface.getTorrentManager().getPluginAttribute( "xmui.dl.id" );
 		
-		BasicPluginConfigModel	config = getConfigModel();
+		BasicPluginConfigModel config = getConfigModel();
 			
-        int port = pluginconfig.getPluginIntParameter( WebPlugin.CONFIG_PORT, CONFIG_PORT_DEFAULT );
+		config.addLabelParameter2( "xmwebui.blank" );
+
+		openui_param = config.addHyperlinkParameter2("xmwebui.openui", "");
 
 		config.addLabelParameter2( "xmwebui.blank" );
 
-		config.addHyperlinkParameter2( "xmwebui.openui", "http://127.0.0.1:" + port + "/" );
-		
+		/////
+
+		webdir_param = config.addDirectoryParameter2("xmwebui.web.dir",
+				"xmwebui.alternate.ui.dir", "");
+		launchAltWebUI_param = config.addHyperlinkParameter2(
+				"xmwebui.openui", "");
+		ParameterListener webdir_param_listener = new ParameterListener() {
+			@Override
+			public void parameterChanged(Parameter param) {
+				String val = ((DirectoryParameter) param).getValue();
+				launchAltWebUI_param.setEnabled(
+						val != null && new File(val).isDirectory());
+			}
+		};
+		webdir_param.addListener(webdir_param_listener);
+		webdir_param_listener.parameterChanged(webdir_param);
+		config.createGroup("xmwebui.alternate.ui.group", new Parameter[] {
+				webdir_param,
+				launchAltWebUI_param
+		});
+
+		//////
+
 		config.addLabelParameter2( "xmwebui.blank" );
 
 		hide_ln_param = config.addBooleanParameter2( "xmwebui.hidelownoise", "xmwebui.hidelownoise", true );
@@ -394,7 +360,29 @@ XMWebUIPlugin
 				changeLogToFile(logtofile_param.getValue());
 			}
 		});
-		
+
+		/////
+
+		ConfigParameter bindip_param = pluginconfig.getPluginParameter(WebPlugin.CONFIG_BIND_IP);
+		if (bindip_param != null) {
+			bindip_param.addConfigParameterListener(new ConfigParameterListener() {
+				@Override
+				public void configParameterChanged(ConfigParameter param) {
+					updateConfigLaunchParams();
+				}
+			});
+		}
+		ConfigParameter port_param = pluginconfig.getPluginParameter(WebPlugin.CONFIG_PORT);
+		if (port_param != null) {
+			port_param.addConfigParameterListener(new ConfigParameterListener() {
+				@Override
+				public void configParameterChanged(ConfigParameter param) {
+					updateConfigLaunchParams();
+				}
+			});
+		}
+		updateConfigLaunchParams();
+
 		ConfigParameter mode_parameter = pluginconfig.getPluginParameter( WebPlugin.CONFIG_MODE );
 
 		if ( mode_parameter == null ){
@@ -613,7 +601,22 @@ XMWebUIPlugin
 			
 		plugin_interface.getUtilities().registerJSONRPCClient((Utilities.JSONClient)json_rpc_client );
 	}
-	
+
+	private void updateConfigLaunchParams() {
+		PluginConfig pc = plugin_interface.getPluginconfig();
+
+		String bindIP = pc.getPluginStringParameter(WebPlugin.CONFIG_BIND_IP,
+				CONFIG_BIND_IP_DEFAULT);
+		if (bindIP.isEmpty()) {
+			bindIP = "127.0.0.1";
+		}
+		int port = pc.getPluginIntParameter(WebPlugin.CONFIG_PORT,
+				CONFIG_PORT_DEFAULT);
+		launchAltWebUI_param.setHyperlink(
+				"http://" + bindIP + ":" + port + "/transmission/web");
+		openui_param.setHyperlink("http://" + bindIP + ":" + port + "/");
+	}
+
 	protected void changeLogToFile(boolean logToFile) {
 		if (log != null) {
 			if (logToFile) {
@@ -886,16 +889,17 @@ XMWebUIPlugin
 			response.setReplyStatus( 415 );
 			return true;
 		}
-		
+
 		try{
 			String session_id = getSessionID( request );
-			
+			String	url = request.getURL();
+
 			// Set cookie just in case client is looking for one..
 			response.setHeader( "Set-Cookie", "X-Transmission-Session-Id=" + session_id + "; path=/; HttpOnly" );
 			// This is the actual spec for massing session-id
 			response.setHeader("X-Transmission-Session-Id", session_id );
 
-			if (!isSessionValid(request, true)) {
+			if (!isSessionValid(request, true) && !url.startsWith( "/transmission/web")) {
 				log("Header:\n" + request.getHeader());
 				LineNumberReader lnr;
 				if ("gzip".equals(request.getHeaders().get("content-encoding"))) {
@@ -927,8 +931,6 @@ XMWebUIPlugin
 				session_id_plus += "/" + tid;
 			}
 			
-			String	url = request.getURL();
-		
 			//System.out.println( "Header: " + request.getHeader() );
 			
 			// "/rpc" added because some webuis assume they are at /transmission/web/index.html
@@ -1190,10 +1192,24 @@ XMWebUIPlugin
 					}
 				}
 			}else if ( url.startsWith( "/transmission/web")){
-					
-				response.setReplyStatus( 301 );
-					
-				response.setHeader( "Location", "/" );
+
+				String webdir = webdir_param.getValue();
+				if (webdir == null || webdir.isEmpty()) {
+
+					response.setReplyStatus( 301 );
+
+					response.setHeader( "Location", "/" );
+				} else {
+					String reldir = url.substring("/transmission/web".length());
+					if (reldir.isEmpty()) {
+						response.setReplyStatus( 301 );
+
+						response.setHeader( "Location", "/transmission/web/" );
+					} else if (reldir.endsWith("/")) {
+						reldir += "index.html";
+					}
+					response.useFile(webdir, reldir);
+				}
 					
 				return( true );
 				
@@ -5028,7 +5044,7 @@ XMWebUIPlugin
 
 				String host = (String)request.getHeaders().get( "host" );
 
-				value = torrentGet_files(host, download, download_id, file_fields, args);
+				value = torrentGet_files(torrent, host, download, download_id, file_fields, args);
 				
 				// One hash for all files.  This won't work when our file list is a partial
 				//if (value instanceof Collection) {
@@ -6437,8 +6453,9 @@ XMWebUIPlugin
 	}
 
 	private Object torrentGet_files(
+			Map mapParent,
 			String host,
-			Download download, 
+			Download download,
 			long download_id,
 			List<String> file_fields,
 			Map args)
@@ -6448,35 +6465,59 @@ XMWebUIPlugin
     // | bytesCompleted          | number     | tr_torrent
     // | length                  | number     | tr_info
     // | name                    | string     | tr_info
-		// Vuze, when file_indexes present:
 		// | index                   | number
-		// | hc                      | number     | hashcode to be later used to supress return of file map
+		// | hc                      | number     | hashcode to be later used to suppress return of file map
 
-		List<Map> file_list = new ArrayList<>();
+		List file_list = new ArrayList<>();
 
 		// Skip files that match these hashcodes
-		List listHCs = MapUtils.getMapList(args, "files-hc-" + download_id, null);
-		
+		List listHCs = getMapList(args, "files-hc-" + download_id, ",", null);
+
 		DiskManagerFileInfo[] files = download.getDiskManagerFileInfo();
 		
 		int[] file_indexes = getFileIndexes(args, download_id);
-		
+
+		boolean mapPerFile = MapUtils.getMapBoolean(args, "mapPerFile", true);
+
 		String baseURL = MapUtils.getMapString(args, "base-url", null);
-		
+
+		boolean all = file_fields == null || file_fields.size() == 0;
+		if (!all) {
+			// sort so we can't use Collections.binarySearch
+			Collections.sort(file_fields);
+		}
+
+
+		boolean didFileKeys = false;
 		if (file_indexes == null || file_indexes.length == 0) {
+			// We don't need to include the index if returning all files (file index request is null and there's no files-hc-*)
+			boolean addIndex = !all
+					|| (file_fields != null
+							&& Collections.binarySearch(file_fields, FIELD_FILES_INDEX) >= 0)
+					|| listHCs != null;
+
 			for (int i = 0; i < files.length; i++) {
 				DiskManagerFileInfo file = files[i];
   			
 				TreeMap map = new TreeMap();
-  			
-				map.put(FIELD_FILES_INDEX, i);
+
+				if (addIndex) {
+					map.put(FIELD_FILES_INDEX, i);
+				}
 
   			torrentGet_files(map, file_fields, host, baseURL, download, file);
   			if (file_fields != null && file_fields.size() > 0) {
   				torrentGet_fileStats(map, file_fields, file);
   			}
 
-  			hashAndAdd(map, file_list, listHCs, i);
+  			if (mapPerFile) {
+					hashAndAdd(map, file_list, listHCs, i);
+			  } else {
+					if (hashAndAddAsCollection(map, file_list, listHCs, i) && !didFileKeys) {
+					  mapParent.put("fileKeys", new ArrayList(map.keySet()));
+					  didFileKeys = true;
+				  }
+			  }
   		}
 		} else {
 			for (int i = 0; i < file_indexes.length; i++) {
@@ -6492,11 +6533,29 @@ XMWebUIPlugin
 				torrentGet_fileStats(map, file_fields, fileInfo);
 				torrentGet_files(map, file_fields, host, baseURL, download, fileInfo);
 
-  			hashAndAdd(map, file_list, listHCs, i);
+				if (mapPerFile) {
+					hashAndAdd(map, file_list, listHCs, i);
+				} else {
+					if (hashAndAddAsCollection(map, file_list, listHCs, i) && !didFileKeys) {
+						mapParent.put("fileKeys", new ArrayList(map.keySet()));
+						didFileKeys = true;
+					}
+				}
 			}
 		}
-		
+
 		return file_list;
+	}
+
+	private List getMapList(Map args, String key, String stringSplitter, List def) {
+		Object oFilesHC = args.get(key);
+		if (oFilesHC instanceof String) {
+			return Arrays.asList(((String) oFilesHC).split(stringSplitter));
+		}
+		if (oFilesHC instanceof List) {
+			return (List) oFilesHC;
+		}
+			return def;
 	}
 
 	private void torrentGet_files(Map obj, List<String> sortedFields,
@@ -6512,13 +6571,13 @@ XMWebUIPlugin
 			obj.put(FIELD_FILES_LENGTH, file.getLength());
 		}
 		if (all || Collections.binarySearch(sortedFields, FIELD_FILES_NAME) >= 0) {
-			String absolutePath = file.getFile(true).getAbsolutePath();
-			String savePath = download.getSavePath();
 			Torrent torrent = download.getTorrent();
 			boolean simpleTorrent = torrent == null ? false : torrent.isSimpleTorrent();
 			if (simpleTorrent) {
 				obj.put(FIELD_FILES_NAME, file.getFile().getName());
 			} else {
+				String absolutePath = file.getFile(true).getAbsolutePath();
+				String savePath = download.getSavePath();
 				if (absolutePath.startsWith(savePath)) {
 					// TODO: .dnd_az parent..
 		    	//String dnd_sf = dm.getDownloadState().getAttribute( DownloadManagerState.AT_DND_SUBFOLDER );
@@ -6567,7 +6626,7 @@ XMWebUIPlugin
 		List<Map>	file_list = new ArrayList<>();
 
 		// Skip files that match these hashcodes
-		List listHCs = MapUtils.getMapList(args, "files-hc" + download_id, null);
+		List listHCs = getMapList(args, "files-hc-" + download_id, ",", null);
 
 		int[] file_indexes = getFileIndexes(args, download_id);
 		
@@ -6792,22 +6851,22 @@ XMWebUIPlugin
 	private List torrentGet_peers(DownloadManager core_download) {
   	// peers              | array of objects, each containing:   |
   	// +-------------------------+------------+
-  	// | address                 | string     | tr_peer_stat
-  	// | clientName              | string     | tr_peer_stat
-  	// | clientIsChoked          | boolean    | tr_peer_stat
-  	// | clientIsInterested      | boolean    | tr_peer_stat
-  	// | flagStr                 | string     | tr_peer_stat
-  	// | isDownloadingFrom       | boolean    | tr_peer_stat
-  	// | isEncrypted             | boolean    | tr_peer_stat
-  	// | isIncoming              | boolean    | tr_peer_stat
-  	// | isUploadingTo           | boolean    | tr_peer_stat
-  	// | isUTP                   | boolean    | tr_peer_stat
-  	// | peerIsChoked            | boolean    | tr_peer_stat
-  	// | peerIsInterested        | boolean    | tr_peer_stat
-  	// | port                    | number     | tr_peer_stat
-  	// | progress                | double     | tr_peer_stat
-  	// | rateToClient (B/s)      | number     | tr_peer_stat
-  	// | rateToPeer (B/s)        | number     | tr_peer_stat
+  	// | address                 | string     | tr_peer_stat | x
+  	// | clientName              | string     | tr_peer_stat | x
+  	// | clientIsChoked          | boolean    | tr_peer_stat | x
+  	// | clientIsInterested      | boolean    | tr_peer_stat | x
+  	// | flagStr                 | string     | tr_peer_stat | partial
+  	// | isDownloadingFrom       | boolean    | tr_peer_stat | x
+  	// | isEncrypted             | boolean    | tr_peer_stat | ?
+  	// | isIncoming              | boolean    | tr_peer_stat | x
+  	// | isUploadingTo           | boolean    | tr_peer_stat | x
+  	// | isUTP                   | boolean    | tr_peer_stat | x
+  	// | peerIsChoked            | boolean    | tr_peer_stat | x
+  	// | peerIsInterested        | boolean    | tr_peer_stat | x
+  	// | port                    | number     | tr_peer_stat | x
+  	// | progress                | double     | tr_peer_stat | x
+  	// | rateToClient (B/s)      | number     | tr_peer_stat | x
+  	// | rateToPeer (B/s)        | number     | tr_peer_stat | x
 
 		List peers = new ArrayList();
 		
@@ -6826,30 +6885,69 @@ XMWebUIPlugin
 
 			final PEPeerStats stats = peer.getStats();
 			boolean isDownloadingFrom = peer.isDownloadPossible() && stats.getDataReceiveRate() > 0;
-			
+			// TODO FIX
+			// peer.connection.getTransport().isEncrypted
+			String encryption = peer.getEncryption();
+			boolean isEncrypted = encryption != null && !encryption.startsWith("None") && !encryption.startsWith("Plain") ;
+			boolean isUTP = peer.getProtocol().equals("uTP");
+			boolean isUploadingTo = stats.getDataSendRate() > 0;
+
 			map.put(FIELD_PEERS_ADDRESS, peer.getIp());
 			map.put(FIELD_PEERS_CLIENT_NAME, peer.getClient());
 			map.put(FIELD_PEERS_CLIENT_CHOKED, peer.isChokedByMe());
 			map.put(FIELD_PEERS_CLIENT_INTERESTED, peer.isInterested());
 
+			map.put("state", peer.getPeerState());
+
 			// flagStr
       // "O": "Optimistic unchoke"
-      // "D": "Downloading from this peer"
-      // "d": "We would download from this peer if they'd let us"
-      // "U": "Uploading to peer"
+      // +"D": "Downloading from this peer"
+      // +"d": "We would download from this peer if they'd let us"
+      // +"U": "Uploading to peer"
       // "u": "We would upload to this peer if they'd ask"
-      // "K": "Peer has unchoked us, but we're not interested"
-      // "?": "We unchoked this peer, but they're not interested"
-      // "E": "Encrypted Connection"
-      // "H": "Peer was discovered through Distributed Hash Table (DHT)"
-      // "X": "Peer was discovered through Peer Exchange (PEX)"
-      // "I": "Peer is an incoming connection"
-      // "T": "Peer is connected via uTP"
+      // +"K": "Peer has unchoked us, but we're not interested"
+      // +"?": "We unchoked this peer, but they're not interested"
+      // +"E": "Encrypted Connection"
+      // +"H": "Peer was discovered through Distributed Hash Table (DHT)"
+      // +"X": "Peer was discovered through Peer Exchange (PEX)"
+      // +"I": "Peer is an incoming connection"
+      // +"T": "Peer is connected via uTP"
 			//TODO
 			StringBuffer flagStr = new StringBuffer();
+
 			if (isDownloadingFrom) {
 				flagStr.append('D');
+			} else if (peer.isDownloadPossible()) {
+				flagStr.append("d");
 			}
+			if (isUploadingTo) {
+				flagStr.append("U");
+			}
+			if (!peer.isChokingMe() && !peer.isInteresting()) {
+				flagStr.append("K");
+			}
+			if (!peer.isChokedByMe() && !peer.isInterested()) {
+				flagStr.append("?");
+			}
+			if (isEncrypted) {
+				flagStr.append("E");
+			}
+			String source = peer.getPeerSource();
+			switch (source) {
+				case PEPeerSource.PS_DHT:
+					flagStr.append('H');
+					break;
+				case PEPeerSource.PS_OTHER_PEER:
+					flagStr.append('X');
+					break;
+				case PEPeerSource.PS_BT_TRACKER :
+					flagStr.append('I');
+					break;
+			}
+			if (isUTP) {
+				flagStr.append("T");
+			}
+
 			map.put(FIELD_PEERS_FLAGSTR, flagStr.toString());
 
 			// code, name
@@ -6859,12 +6957,11 @@ XMWebUIPlugin
 			}
 			
 			map.put(FIELD_PEERS_IS_DLING_FROM, isDownloadingFrom);
-			// peer.connection.getTransport().isEncrypted
-			map.put(FIELD_PEERS_IS_ENCRYPTED, !"None".equals(peer.getEncryption()));  // TODO FIX
+			map.put(FIELD_PEERS_IS_ENCRYPTED, isEncrypted);
 			map.put(FIELD_PEERS_IS_INCOMING, peer.isIncoming());
-			map.put(FIELD_PEERS_IS_ULING_TO, stats.getDataSendRate() > 0);
+			map.put(FIELD_PEERS_IS_ULING_TO, isUploadingTo);
 			// RPC v13
-			map.put(FIELD_PEERS_IS_UTP, peer.getProtocol().equals("uTP"));
+			map.put(FIELD_PEERS_IS_UTP, isUTP);
 			map.put(FIELD_PEERS_PEER_CHOKED, peer.isChokingMe());
 			map.put(FIELD_PEERS_PEER_INTERESTED, peer.isInteresting());
 			// RPC v3
@@ -7866,6 +7963,22 @@ XMWebUIPlugin
 			map.put("hc", hc);
 			addToList.add(map);
 		}
+	}
+
+	private boolean hashAndAddAsCollection(SortedMap map, List<Collection> addToList, List hcMatchList,
+	                        int i) {
+		long hashCode = longHashSimpleMap(map);
+		// hex string shorter than long in json, even with quotes
+		String hc = Long.toHexString(hashCode);
+
+		boolean remove = hcMatchList != null && i < hcMatchList.size()
+				&& hc.equals(hcMatchList.get(i));
+		if (!remove) {
+			map.put("hc", hc);
+			addToList.add(new ArrayList( map.values()));
+			return true;
+		}
+		return false;
 	}
 
 	/**
