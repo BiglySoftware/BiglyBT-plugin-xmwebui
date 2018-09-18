@@ -27,7 +27,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import com.biglybt.core.util.Constants;
+import com.biglybt.core.pairing.PairingManagerFactory;
 import com.biglybt.core.util.Debug;
 import org.json.simple.JSONObject;
 
@@ -111,7 +111,9 @@ XMClientConnection
 			
 		}else{
 			try{
-				String url = Constants.PAIRING_URL + "/remote/listBindings?ac=" + getAccessCode() + "&jsoncallback=";
+				URL service_url = PairingManagerFactory.getSingleton().getServiceURL();
+				
+				String url = service_url.toExternalForm() + "/remote/listBindings?ac=" + getAccessCode() + "&jsoncallback=";
 				
 				String reply = new String( XMRPCClientUtils.getFromURLBasic( url ), "UTF-8" );
 				
@@ -258,7 +260,7 @@ XMClientConnection
 					
 					if ( rpc == null ){
 						
-						String	tunnel_server = "https://pair.vuze.com/";
+						String tunnel_server = PairingManagerFactory.getSingleton().getTunnelServer();
 		
 						log( "Attempting proxy secured connection: " + tunnel_server );
 					
