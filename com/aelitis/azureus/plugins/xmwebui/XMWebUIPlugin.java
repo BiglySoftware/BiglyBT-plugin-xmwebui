@@ -25,10 +25,7 @@ package com.aelitis.azureus.plugins.xmwebui;
 import static com.aelitis.azureus.plugins.xmwebui.TransmissionVars.*;
 
 import java.io.*;
-import java.net.MalformedURLException;
-import java.net.URI;
-import java.net.URL;
-import java.net.URLDecoder;
+import java.net.*;
 import java.text.DateFormat;
 import java.text.NumberFormat;
 import java.text.ParseException;
@@ -69,27 +66,18 @@ import com.biglybt.core.metasearch.*;
 import com.biglybt.core.metasearch.impl.web.WebEngine;
 import com.biglybt.core.pairing.PairingManager;
 import com.biglybt.core.pairing.PairingManagerFactory;
-import com.biglybt.core.peer.PEPeer;
-import com.biglybt.core.peer.PEPeerManager;
-import com.biglybt.core.peer.PEPeerSource;
-import com.biglybt.core.peer.PEPeerStats;
+import com.biglybt.core.peer.*;
 import com.biglybt.core.peer.util.PeerUtils;
 import com.biglybt.core.security.CryptoManager;
 import com.biglybt.core.stats.transfer.OverallStats;
 import com.biglybt.core.stats.transfer.StatsFactory;
 import com.biglybt.core.subs.*;
-import com.biglybt.core.tag.Tag;
-import com.biglybt.core.tag.TagManager;
-import com.biglybt.core.tag.TagManagerFactory;
-import com.biglybt.core.tag.TagType;
+import com.biglybt.core.tag.*;
 import com.biglybt.core.torrent.PlatformTorrentUtils;
 import com.biglybt.core.torrent.TOTorrent;
 import com.biglybt.core.torrent.TOTorrentFactory;
 import com.biglybt.core.tracker.TrackerPeerSource;
-import com.biglybt.core.tracker.client.TRTrackerAnnouncer;
-import com.biglybt.core.tracker.client.TRTrackerAnnouncerResponse;
-import com.biglybt.core.tracker.client.TRTrackerScraper;
-import com.biglybt.core.tracker.client.TRTrackerScraperResponse;
+import com.biglybt.core.tracker.client.*;
 import com.biglybt.core.util.*;
 import com.biglybt.core.versioncheck.VersionCheckClient;
 import com.biglybt.core.vuzefile.VuzeFile;
@@ -102,20 +90,14 @@ import com.biglybt.pif.disk.DiskManagerFileInfo;
 import com.biglybt.pif.download.*;
 import com.biglybt.pif.download.DownloadStub.DownloadStubFile;
 import com.biglybt.pif.logging.LoggerChannel;
-import com.biglybt.pif.torrent.Torrent;
-import com.biglybt.pif.torrent.TorrentAttribute;
-import com.biglybt.pif.torrent.TorrentDownloader;
-import com.biglybt.pif.torrent.TorrentManager;
+import com.biglybt.pif.torrent.*;
 import com.biglybt.pif.tracker.web.TrackerWebPageRequest;
 import com.biglybt.pif.tracker.web.TrackerWebPageResponse;
 import com.biglybt.pif.ui.UIInstance;
 import com.biglybt.pif.ui.UIManagerListener;
 import com.biglybt.pif.ui.config.*;
 import com.biglybt.pif.ui.model.BasicPluginConfigModel;
-import com.biglybt.pif.update.Update;
-import com.biglybt.pif.update.UpdateCheckInstance;
-import com.biglybt.pif.update.UpdateCheckInstanceListener;
-import com.biglybt.pif.update.UpdateManager;
+import com.biglybt.pif.update.*;
 import com.biglybt.pif.utils.Utilities;
 import com.biglybt.pif.utils.Utilities.JSONServer;
 import com.biglybt.pif.utils.resourcedownloader.ResourceDownloader;
@@ -4290,14 +4272,12 @@ XMWebUIPlugin
 		 */
 		checkUpdatePermissions();
 
-		String metainfoString = (String) args.get("metainfo");
-
 	 	Map<String, Object> mapTorrent = null;
 
-		if ( metainfoString != null ){
+		if ( args.containsKey("metainfo") ){
 
-			byte[] metainfoBytes = Base64.decode( metainfoString.replaceAll("[\r\n]+", "") );
-			//metainfoBytes = Base64.decode( metainfoString );
+			// .remove to increase chances of metainfo being GC'd if needed
+			byte[] metainfoBytes = decodeBase64(((String) args.remove("metainfo")));
 
 			BDecoder decoder = new BDecoder();
 			decoder.setVerifyMapOrder(true);
@@ -4719,7 +4699,17 @@ XMWebUIPlugin
 
 		result.put(duplicate ? "torrent-duplicate" : "torrent-added", torrent_details);
 	}
-	
+
+	private byte[] decodeBase64(String s) {
+		String newLineCheck = s.substring(0, 90);
+		boolean hasNewLine = newLineCheck.indexOf('\r') >= 0
+				|| newLineCheck.indexOf('\n') >= 0;
+		if (hasNewLine) {
+			s = s.replaceAll("[\r\n]+", "");
+		}
+		return Base64.decode(s);
+	}
+
 	private byte[] getHashFromMagnetURI(String magnetURI) {
 		Pattern patXT = Pattern.compile("xt=urn:(?:btih|sha1):([^&]+)");
 		Matcher matcher = patXT.matcher(magnetURI);
