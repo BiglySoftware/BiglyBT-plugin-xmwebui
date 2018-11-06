@@ -901,9 +901,85 @@ VZ.3 Vuze Lifecycle
    key                  | value type & description
    ---------------------+-------------------------------------------------
 
- VZ.4 Tags
+VZ.4 Tags
  
  We support tag RPCs.
+
+   Method name: "tags-get-list"
+
+   Request arguments:
+
+   key                  | value type & description
+   ---------------------+-------------------------------------------------
+   "fields"             | array of string field names to return.  Optional
+   "tags-hc"            | object       Optional. hashcode passed from last result
+
+   Response arguments:
+   
+   key                  | value type & description
+   ---------------------+-------------------------------------------------
+	 "tags-hc"            | object       hashcode to use when requesting again
+   "tags"               | array of map.  Will not return if tags haven't changed from tags-hc
+
+		 key                  | value type & description
+		 ---------------------+-------------------------------------------------
+		 "name"               | string       Tag name
+		 "count"              | number       Number of torrents having this tag
+		 "type"               | number       Species of Tag
+													|                1: Category
+													|                2: Download State
+													|                3: Download Manual (User Tags)
+													|                4: Peer IP set
+		 "type-name"          | string       Things like "Category", but localized
+		 "category-type"      | number       Only if tag is a category
+													|                0: User
+													|                1: All
+													|                2: Uncategorized
+		 "uid"                | number       Unique id across tag types
+		 "id"                 | number       Id within this tag type  
+		 "color"              | string       #rrggbb color hint
+		 "canBePublic"        | boolean      true if tag can be set to public
+		 "public"             | boolean      true if tag is shared
+		 "visible"            | boolean      not useful
+		 "group"              | string       User defined group name that this tag belongs to
+		 "auto_add"           | boolean      Tag is auto-added based on rules
+		 "auto_remove"        | boolean      Tag is auto-removed based on rules
+
+
+   Method name: "tags-lookup-start"
+
+   Request arguments:
+
+   key                  | value type & description
+   ---------------------+-------------------------------------------------
+   "ids"                 | array      torrent list, as described in 3.1
+
+   Response arguments:
+
+   key                  | value type & description
+   ---------------------+-------------------------------------------------
+   "id"                 | string       Tag Search ID to be used for result lookup
+
+   Method name: "tags-lookup-get-results"
+
+   Request arguments:
+
+   key                  | value type & description
+   ---------------------+-------------------------------------------------
+   "id"                 | string       Tag Search ID from tags-lookup-start
+
+   Response arguments:
+
+   key                  | value type & description
+   ---------------------+-------------------------------------------------
+   "id"                 | string       Tag Search ID to be used for result lookup
+   "torrents"           | array of map
+       key                  | value type & description
+       ---------------------+-------------------------------------------------
+       "hashString"         | Torrent hash
+       "tags"               | array of string tag names
+
+
  TODO: Document
  
  VZ.5 Hash Codes
