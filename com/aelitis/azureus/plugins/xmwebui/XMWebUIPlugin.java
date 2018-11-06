@@ -84,6 +84,7 @@ import com.biglybt.core.tag.TagManagerFactory;
 import com.biglybt.core.tag.TagType;
 import com.biglybt.core.torrent.PlatformTorrentUtils;
 import com.biglybt.core.torrent.TOTorrent;
+import com.biglybt.core.torrent.TOTorrentFactory;
 import com.biglybt.core.tracker.TrackerPeerSource;
 import com.biglybt.core.tracker.client.TRTrackerAnnouncer;
 import com.biglybt.core.tracker.client.TRTrackerAnnouncerResponse;
@@ -120,6 +121,7 @@ import com.biglybt.pif.utils.Utilities.JSONServer;
 import com.biglybt.pif.utils.resourcedownloader.ResourceDownloader;
 import com.biglybt.pif.utils.resourcedownloader.ResourceDownloaderAdapter;
 import com.biglybt.pifimpl.local.PluginCoreUtils;
+import com.biglybt.pifimpl.local.torrent.TorrentImpl;
 import com.biglybt.pifimpl.local.utils.resourcedownloader.ResourceDownloaderFactoryImpl;
 import com.biglybt.plugin.dht.DHTPlugin;
 import com.biglybt.plugin.startstoprules.defaultplugin.DefaultRankCalculator;
@@ -4290,18 +4292,23 @@ XMWebUIPlugin
 
 		String metainfoString = (String) args.get("metainfo");
 
-		byte[]	metainfoBytes = null;
-		
+	 	Map<String, Object> mapTorrent = null;
+
 		if ( metainfoString != null ){
-		
-			metainfoBytes = Base64.decode( metainfoString.replaceAll("[\r\n]+", "") );
+
+			byte[] metainfoBytes = Base64.decode( metainfoString.replaceAll("[\r\n]+", "") );
 			//metainfoBytes = Base64.decode( metainfoString );
-		
+
+			BDecoder decoder = new BDecoder();
+			decoder.setVerifyMapOrder(true);
+			mapTorrent = decoder.decodeByteArray(metainfoBytes);
+			
+
 			VuzeFileHandler vfh = VuzeFileHandler.getSingleton();
 	
 			if ( vfh != null ){
 				
-				VuzeFile vf = vfh.loadVuzeFile( metainfoBytes );
+				VuzeFile vf = vfh.loadVuzeFile( mapTorrent );
 	
 				if ( vf != null ){
 					
@@ -4454,13 +4461,15 @@ XMWebUIPlugin
 			};
 		
 		
-		TorrentManager torrentManager = plugin_interface.getTorrentManager();
-		
 		boolean duplicate = false;
 
-		if ( metainfoBytes != null ){
+		if ( mapTorrent != null ){
 			try {
-				torrent = torrentManager.createFromBEncodedData( metainfoBytes);
+				// Note: adding the torrent will cause another deserialize
+				//       because the core saves the TOTorrent to disk, and then
+				//       reads it.
+				TOTorrent toTorrent = TOTorrentFactory.deserialiseFromMap(mapTorrent);
+				torrent = new TorrentImpl(plugin_interface, toTorrent);
 				
 				com.biglybt.pif.download.DownloadManager dm = plugin_interface.getDownloadManager();
 				download = dm.getDownload( torrent );
@@ -4512,6 +4521,8 @@ XMWebUIPlugin
 			}
 			
 			try{
+				TorrentManager torrentManager = plugin_interface.getTorrentManager();
+
 				final TorrentDownloader dl = torrentManager.getURLDownloader(torrent_url, null, null);
 
 				Object cookies = args.get("cookies");
