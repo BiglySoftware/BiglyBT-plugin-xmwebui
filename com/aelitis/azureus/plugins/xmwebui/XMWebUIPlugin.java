@@ -212,6 +212,8 @@ XMWebUIPlugin
 		private LoggerChannel log;
 
 		private long lastVerserverCheck;
+		
+		private Map<Long, Object> referenceKeeper = new LinkedHashMap<>();
     
     public
     XMWebUIPlugin()
@@ -486,6 +488,8 @@ XMWebUIPlugin
 							}	
 						}
 					}
+					
+					cleanupReferenceKeeper();
 				}
 			});
 		
@@ -584,6 +588,20 @@ XMWebUIPlugin
 			};
 			
 		plugin_interface.getUtilities().registerJSONRPCClient((Utilities.JSONClient)json_rpc_client );
+	}
+
+	private void cleanupReferenceKeeper() {
+		synchronized (referenceKeeper) {
+			long breakTime = SystemTime.getOffsetTime(1000 * -60);
+			for (Iterator<Long> iterator = referenceKeeper.keySet().iterator(); iterator.hasNext(); ) {
+				Long timestamp = iterator.next();
+				if (timestamp < breakTime) {
+					iterator.remove();
+				} else {
+					break;
+				}
+			}
+		}
 	}
 
 	private void updateConfigLaunchParams() {
@@ -1141,7 +1159,7 @@ XMWebUIPlugin
 								
 							}catch( Throwable e ){
 								
-								throw( new IOException( "Failed to deserialise torrent file: " + Debug.getNestedExceptionMessage(e)));
+								throw( new IOException( "Failed to deserialise torrent file: " + getCausesMesssages(e)));
 							}
 							
 							try{
@@ -1155,7 +1173,7 @@ XMWebUIPlugin
 								
 							}catch( Throwable e ){
 								
-								throw( new IOException( "Failed to add torrent: " + Debug.getNestedExceptionMessage(e)));
+								throw( new IOException( "Failed to add torrent: " + getCausesMesssages(e)));
 	
 							}
 						}
@@ -1229,7 +1247,7 @@ XMWebUIPlugin
 				e.printStackTrace();
 			}
 			
-			throw( new IOException( "Processing failed: " + Debug.getNestedExceptionMessage( e )));
+			throw( new IOException( "Processing failed: " + getCausesMesssages( e )));
 		}
 	}
 	
@@ -1242,18 +1260,18 @@ XMWebUIPlugin
 			
 			return null;
 		}
-		
-		String[] cookie_list = cookies.split( ";" );
+
+		List<String> cookie_list = fastSplit(cookies, ';');
 		
 		for ( String cookie: cookie_list ){
+
+			List<String> bits = fastSplit(cookie, '=');
 			
-			String[] bits = cookie.split( "=" );
-			
-			if ( bits.length == 2 ){
+			if ( bits.size() == 2 ){
 				
-				if ( bits[0].trim().equals( cookie_id )){
+				if ( bits.get(0).trim().equals( cookie_id )){
 					
-					return bits[1].trim();
+					return bits.get(1).trim();
 				}
 			}
 		}
@@ -1435,7 +1453,7 @@ XMWebUIPlugin
 		
 		}catch( Throwable e ){
 			log("processRequest", e);
-			response.put( "result", "error: " + Debug.getNestedExceptionMessage( e ));
+			response.put( "result", "error: " + getCausesMesssages( e ));
 		}
 		
 		Object	tag = request.get( "tag" );
@@ -1446,6 +1464,26 @@ XMWebUIPlugin
 		}
 		
 		return( response );
+	}
+
+	public static String getCausesMesssages(Throwable e) {
+		try {
+			StringBuilder sb = new StringBuilder();
+			while (e != null) {
+				if (sb.length() > 0) {
+					sb.append(", ");
+				}
+				sb.append(e.getClass().getSimpleName());
+				sb.append(": ");
+				sb.append(e.getMessage());
+				e = e.getCause();
+			}
+
+			return sb.toString();
+
+		} catch (Throwable derp) {
+			return "derp " + derp.getClass().getSimpleName(); //NON-NLS
+		}
 	}
 
 	static Number getNumber(
@@ -4220,7 +4258,7 @@ XMWebUIPlugin
 					
 				}else{
 				
-					throw( new TextualException( "Vuze file addition failed: " + Debug.getNestedExceptionMessage( last_error )));
+					throw( new TextualException( "Vuze file addition failed: " + getCausesMesssages( last_error )));
 				}
 			}
 		}
@@ -4462,7 +4500,7 @@ XMWebUIPlugin
 				//System.err.println("decode of " + new String(Base64.encode(metainfoBytes), "UTF8"));
 
 				throw (new IOException("torrent download failed: "
-						+ Debug.getNestedExceptionMessage(e)));
+						+ getCausesMesssages(e)));
 			}
 		} else if (url == null) {
 
@@ -4680,7 +4718,7 @@ XMWebUIPlugin
 
 				e.printStackTrace();
 
-				throw( new IOException( Debug.getNestedExceptionMessage( e )));
+				throw( new IOException( getCausesMesssages( e )));
 			}
 			}
 		}
@@ -5578,7 +5616,7 @@ XMWebUIPlugin
 					
 				}else{
 					
-					error_str = Debug.getNestedExceptionMessage( e );
+					error_str = getCausesMesssages( e );
 				}
 				
 				String magnet_url = md.getMagnetURL().toExternalForm();
@@ -6472,7 +6510,7 @@ XMWebUIPlugin
 		List file_list = new ArrayList<>();
 
 		// Skip files that match these hashcodes
-		List listHCs = getMapList(args, "files-hc-" + download_id, ",", null);
+		List listHCs = getMapList(args, "files-hc-" + download_id, ',', null);
 
 		DiskManagerFileInfo[] files = download.getDiskManagerFileInfo();
 		
@@ -6548,21 +6586,40 @@ XMWebUIPlugin
 		return file_list;
 	}
 
-	private List getMapList(Map args, String key, String stringSplitter, List def) {
+	private List<String> fastSplit(String s, char charSplitter) {
+		List<String> list = new ArrayList<>();
+
+		int pos = 0;
+
+		int len = s.length();
+		while (pos < len) {
+			int end = s.indexOf(charSplitter, pos);
+			if (end == -1) {
+				end = len;
+			}
+			String nextString = s.substring(pos, end);
+			pos = end + 1; // Skip the delimiter.
+			list.add(nextString);
+		}
+
+		return list;
+	}
+
+	private List getMapList(Map args, String key, char charSplitter, List def) {
 		Object oFilesHC = args.get(key);
 		if (oFilesHC instanceof String) {
-			return Arrays.asList(((String) oFilesHC).split(stringSplitter));
+			return fastSplit((String) oFilesHC, charSplitter);
 		}
 		if (oFilesHC instanceof List) {
 			return (List) oFilesHC;
 		}
-			return def;
+		return def;
 	}
 
 	private void torrentGet_files(Map obj, List<String> sortedFields,
 			String host, String baseURL, Download download, DiskManagerFileInfo file) {
 		boolean all = sortedFields == null || sortedFields.size() == 0;
-
+		File realFile = null;
 		if (all
 				|| Collections.binarySearch(sortedFields,
 						FIELD_FILESTATS_BYTES_COMPLETED) >= 0) {
@@ -6574,10 +6631,12 @@ XMWebUIPlugin
 		if (all || Collections.binarySearch(sortedFields, FIELD_FILES_NAME) >= 0) {
 			Torrent torrent = download.getTorrent();
 			boolean simpleTorrent = torrent == null ? false : torrent.isSimpleTorrent();
+			realFile = file.getFile(true);
+
 			if (simpleTorrent) {
-				obj.put(FIELD_FILES_NAME, file.getFile().getName());
+				obj.put(FIELD_FILES_NAME, realFile.getName());
 			} else {
-				String absolutePath = file.getFile(true).getAbsolutePath();
+				String absolutePath = realFile.getAbsolutePath();
 				String savePath = download.getSavePath();
 				if (absolutePath.startsWith(savePath)) {
 					// TODO: .dnd_az parent..
@@ -6610,7 +6669,16 @@ XMWebUIPlugin
 
 			if (showAllVuze
 					|| Collections.binarySearch(sortedFields, FIELD_FILES_FULL_PATH) >= 0) {
-				obj.put(FIELD_FILES_FULL_PATH, file.getFile().toString());
+				if (realFile == null) {
+					realFile = file.getFile(true);
+				}
+				obj.put(FIELD_FILES_FULL_PATH, realFile.toString());
+			}
+		}
+		
+		if (realFile != null) {
+			synchronized (referenceKeeper) {
+				referenceKeeper.put(SystemTime.getCurrentTime(), realFile);
 			}
 		}
 	}
@@ -6627,7 +6695,7 @@ XMWebUIPlugin
 		List<Map>	file_list = new ArrayList<>();
 
 		// Skip files that match these hashcodes
-		List listHCs = getMapList(args, "files-hc-" + download_id, ",", null);
+		List listHCs = getMapList(args, "files-hc-" + download_id, ',', null);
 
 		int[] file_indexes = getFileIndexes(args, download_id);
 		
@@ -7496,7 +7564,7 @@ XMWebUIPlugin
 
 			}catch( Throwable e ){
 				
-				throw( new IOException( "Failed to get thumbnail: " + Debug.getNestedExceptionMessage( e )));
+				throw( new IOException( "Failed to get thumbnail: " + getCausesMesssages( e )));
 			}
 			
 			return( true );
@@ -7793,7 +7861,7 @@ XMWebUIPlugin
 	
 					if ( error[0] != null ){
 						
-						throw( new IOException( "Failed to apply updates: " + Debug.getNestedExceptionMessage( error[0] )));
+						throw( new IOException( "Failed to apply updates: " + getCausesMesssages( error[0] )));
 					}
 					
 					result.put( "restarting", restarting[0] );
@@ -7811,7 +7879,7 @@ XMWebUIPlugin
 			}
 		}catch( PluginException e ){
 			
-			throw( new IOException( "Lifecycle command failed: " + Debug.getNestedExceptionMessage(e)));
+			throw( new IOException( "Lifecycle command failed: " + getCausesMesssages(e)));
 		}
 	}
 	
@@ -7956,8 +8024,12 @@ XMWebUIPlugin
 			int i) {
 		long hashCode = longHashSimpleMap(map);
 		// hex string shorter than long in json, even with quotes
-		String hc = Long.toHexString(hashCode);
-
+		// Long.toString(hashCode) = Up to 19
+		// Long.toHexString(hashCode) = Up to 16 + 2 = 18
+		// Base64.encode(ByteFormatter.longToByteArray(hashCode)) = 8 bytes, 12 chars + 2 = 14
+		// encodeNumber(hashCode) = up to 12
+		String hc = encodeNumber(hashCode);
+		
 		boolean remove = hcMatchList != null && i < hcMatchList.size()
 				&& hc.equals(hcMatchList.get(i));
 		if (!remove) {
@@ -7966,11 +8038,37 @@ XMWebUIPlugin
 		}
 	}
 
+	private static final char[] encodingTable = {
+			'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 
+			'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z',
+			'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 
+			'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z',
+			'0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '+', '/'
+	};
+
+	static String encodeNumber(long x) {
+		char[] buf = new char[12];
+		int p = buf.length;
+		boolean isNeg = x < 0;
+		if (isNeg) {
+			x = x * -1;
+		}
+		do {
+			int idx = (byte) ((x & 0xff) % 64);
+			buf[--p] = encodingTable[idx];
+			x >>>= 6;
+		} while (x != 0);
+		if (isNeg) {
+			buf[--p] = '-';
+		}
+		return new String(buf, p, buf.length - p);
+	}
+
+
 	private boolean hashAndAddAsCollection(SortedMap map, List<Collection> addToList, List hcMatchList,
 	                        int i) {
 		long hashCode = longHashSimpleMap(map);
-		// hex string shorter than long in json, even with quotes
-		String hc = Long.toHexString(hashCode);
+		String hc = encodeNumber(hashCode);
 
 		boolean remove = hcMatchList != null && i < hcMatchList.size()
 				&& hc.equals(hcMatchList.get(i));
@@ -8035,16 +8133,18 @@ XMWebUIPlugin
 		return hash;
 	}
 
-	// FROM http://stackoverflow.com/questions/1660501/what-is-a-good-64bit-hash-function-in-java-for-textual-strings
-	//adapted from String.hashCode()
 	public static long hash(String string) {
-		long h = 1125899906842597L; // prime
-		int len = string.length();
-
-		for (int i = 0; i < len; i++) {
-			h = 31 * h + string.charAt(i);
-		}
-		return h;
+		// Use simpler hashCode as Java caches it
+		return string.hashCode();
+// FROM http://stackoverflow.com/questions/1660501/what-is-a-good-64bit-hash-function-in-java-for-textual-strings
+//adapted from String.hashCode()
+//		long h = 1125899906842597L; // prime
+//		int len = string.length();
+//
+//		for (int i = 0; i < len; i++) {
+//			h = 31 * h + string.charAt(i);
+//		}
+//		return h;
 	}
 
 	//////////////////////////////////////////////////////////////////////////////
@@ -8136,20 +8236,20 @@ XMWebUIPlugin
 				
 				str = str.substring( pos+1 );
 			}
-			
-			String[]	args = str.split( "&" );
+
+			List<String> args = fastSplit(str, '&');
 
 			Map<String,String>	arg_map = new HashMap<>();
 			
 			for ( String arg: args ){
+
+				List<String> bits = fastSplit(arg, '=');
 				
-				String[] bits = arg.split( "=" );
-				
-				if ( bits.length == 2 ){
+				if ( bits.size() == 2 ){
 					
 					try{
-						String lhs = bits[0].trim().toLowerCase( Locale.US );
-						String rhs = URLDecoder.decode( bits[1].trim(), Constants.DEFAULT_ENCODING);
+						String lhs = bits.get(0).trim().toLowerCase( Locale.US );
+						String rhs = URLDecoder.decode( bits.get(1).trim(), Constants.DEFAULT_ENCODING);
 						
 						if ( lhs.equals( "xt" )){
 							
