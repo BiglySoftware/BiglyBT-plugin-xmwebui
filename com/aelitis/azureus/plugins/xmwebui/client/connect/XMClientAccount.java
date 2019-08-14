@@ -28,6 +28,9 @@ public interface
 XMClientAccount 
 {
 	public String
+	getUID();
+	
+	public String
 	getAccessCode();
 
 	public boolean

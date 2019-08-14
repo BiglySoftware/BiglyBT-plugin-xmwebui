@@ -93,6 +93,7 @@ import com.biglybt.pif.logging.LoggerChannel;
 import com.biglybt.pif.torrent.*;
 import com.biglybt.pif.tracker.web.TrackerWebPageRequest;
 import com.biglybt.pif.tracker.web.TrackerWebPageResponse;
+import com.biglybt.pif.ui.UIException;
 import com.biglybt.pif.ui.UIInstance;
 import com.biglybt.pif.ui.UIManagerListener;
 import com.biglybt.pif.ui.config.*;
@@ -108,6 +109,7 @@ import com.biglybt.pifimpl.local.utils.resourcedownloader.ResourceDownloaderFact
 import com.biglybt.plugin.dht.DHTPlugin;
 import com.biglybt.plugin.startstoprules.defaultplugin.DefaultRankCalculator;
 import com.biglybt.plugin.startstoprules.defaultplugin.StartStopRulesDefaultPlugin;
+import com.biglybt.ui.console.ConsoleInput;
 import com.biglybt.ui.webplugin.WebPlugin;
 import com.biglybt.util.JSONUtils;
 import com.biglybt.util.MapUtils;
@@ -1719,6 +1721,10 @@ XMWebUIPlugin
 				
 				processVuzeFileAdd( args, result );
 	
+			}else if ( method.equals( "bigly-console" )){
+				
+				processConsole( args, result );
+				
 			}else{
 			
 				Utilities.JSONServer server = (Utilities.JSONServer)json_server_methods.get( method );
@@ -2926,7 +2932,7 @@ XMWebUIPlugin
 
     result.put(TR_PREFS_KEY_TRASH_ORIGINAL, false ); //TODO
 
-    String az_version = Constants.AZUREUS_VERSION;
+    String az_version = Constants.getCurrentVersion();
     
     try{
     		// get the actual version instead of cached constant; since 5001
@@ -4262,6 +4268,200 @@ XMWebUIPlugin
 				}
 			}
 		}
+	}
+	
+	Map<String,ConsoleContext>		console_contexts = new HashMap<>();
+
+	private class
+	ConsoleContext
+	{
+		private final String		uid;
+		
+		private final ConsoleInput			console;
+		private final InputStreamReader 	console_in_stream;
+		private final PipedOutputStream 	console_out_stream;
+		private final LinkedList<String>	console_pending = new LinkedList<>();
+		private final AESemaphore			console_sem = new AESemaphore( "XMWebUIPlugin:console-ui" );
+		
+		private boolean				console_closed;
+		
+		private 
+		ConsoleContext(
+			String		_uid )
+		
+			throws IOException
+		{
+			uid = _uid;
+			
+			PipedInputStream pis1 = new PipedInputStream( 32*1024 );
+			
+			console_out_stream = new PipedOutputStream( pis1 );
+			
+			PipedInputStream pis2 = new PipedInputStream( 32*1024 );
+			
+			PipedOutputStream console_in = new PipedOutputStream( pis2 );
+			
+			PrintStream out = new PrintStream( console_in, true );
+			
+			AEThread2.createAndStartDaemon(
+				"XMWebUIPlugin:console-ui",
+				()->{
+					try{
+						LineNumberReader lnr = new LineNumberReader( new InputStreamReader( pis2, Constants.UTF_8  ));
+						
+						while( true ){
+						
+							String line = lnr.readLine();
+							
+							if ( line == null ){
+									
+								break;
+							}
+							
+							synchronized( ConsoleContext.this ){
+
+								console_pending.add( line.trim());
+							}
+							
+							console_sem.release();
+							
+						}
+					}catch( Throwable e ){
+						
+						Debug.out( e );
+						
+					}finally{
+						
+						destroy();
+					}
+				});
+			
+			console_in_stream = new InputStreamReader( pis1, Constants.UTF_8 );
+			
+			console = new ConsoleInput( "", CoreFactory.getSingleton(), console_in_stream, out, Boolean.FALSE);
+		}
+		
+		private List<String>
+		process(
+			Map 	args )
+		{
+			List<String>	lines = new ArrayList<>();
+
+			try{
+				console_out_stream.write( (args.get( "cmd" ) + "\n" ).getBytes( Constants.UTF_8 ));
+				
+				String marker = Base32.encode(RandomUtils.nextSecureHash());
+				
+				console_out_stream.write( ("echo " + marker + "\n" ).getBytes( Constants.UTF_8 ));
+								
+				while( true ){
+					
+					if ( !console_sem.reserve(5000)){
+						
+						lines.add( "..." );
+						
+						break;
+					}
+					
+					synchronized( ConsoleContext.this ){
+						
+						if ( console_closed ){
+						
+							break;
+						}
+					
+						String line = console_pending.removeFirst();
+						
+						if ( line.contains( marker )){
+							
+							break;
+							
+						}else{
+							
+							lines.add( line );
+						}
+					}
+				}
+								
+			}catch( Throwable e ){
+				
+				lines.add( "Processing failed: " + Debug.getNestedExceptionMessage( e ));
+				
+				destroy();
+			}
+			
+			return( lines );
+		}
+		
+		private void
+		destroy()
+		{
+			try{
+				synchronized( ConsoleContext.this ){
+					
+					console_closed = true;
+				}
+				
+				try{
+					console_in_stream.close();
+					
+				}catch( Throwable e ){
+					
+				}
+				
+				try{
+					console_out_stream.close();
+					
+				}catch( Throwable e ){
+					
+				}
+				
+				console_sem.release();
+		
+			}finally{
+				
+				synchronized( console_contexts ){
+
+					console_contexts.remove( uid );
+				}
+			}
+		}
+		
+	}
+	
+	private void
+	processConsole(
+		Map 	args, 
+		Map 	result )
+	
+		throws IOException, TextualException
+	{
+		checkUpdatePermissions();
+
+		String uid = (String)args.get( "instance_id" );
+		
+		if ( uid == null ){
+			
+			throw( new IOException( "instance_id missing" ));
+		}
+		
+		ConsoleContext	console;
+		
+		synchronized( console_contexts ){
+			
+			console = console_contexts.get( uid );
+		
+			if ( console == null ){
+				
+				console = new ConsoleContext( uid );
+				
+				console_contexts.put( uid, console );
+			}
+		}
+
+		List<String>	lines = console.process( args );
+		
+		result.put( "lines", lines );
 	}
 	
 	private void 

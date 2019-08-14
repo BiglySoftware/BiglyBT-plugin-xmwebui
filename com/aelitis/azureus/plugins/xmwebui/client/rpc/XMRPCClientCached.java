@@ -63,9 +63,7 @@ XMRPCClientCached
 		Map		args	= (Map)request.get( "arguments" );
 		
 		String	key = method + ": " + args;
-		
-		System.out.println( "cache key: " + key );
-		
+				
 		CacheEntry	entry = null;
 		
 		synchronized( cache ){

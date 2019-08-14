@@ -31,6 +31,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 
@@ -58,7 +59,9 @@ import com.biglybt.core.config.COConfigurationManager;
 import com.biglybt.core.config.impl.ConfigurationManager;
 import com.biglybt.core.internat.MessageText;
 import com.biglybt.core.util.AEThread2;
+import com.biglybt.core.util.Base32;
 import com.biglybt.core.util.Debug;
+import com.biglybt.core.util.RandomUtils;
 import com.biglybt.pif.ui.UIInstance;
 import com.biglybt.ui.swt.Messages;
 import com.biglybt.ui.swt.Utils;
@@ -779,13 +782,6 @@ XMWebUIPluginView
 					keyPressed(
 						KeyEvent e )
 					{
-					}
-					
-					@Override
-					public void
-					keyReleased(
-						KeyEvent e )
-					{
 						int	code = e.keyCode;
 						
 						if ( code == SWT.ARROW_UP ){
@@ -799,7 +795,11 @@ XMWebUIPluginView
 							
 							if ( history_index < history.size()){
 								
-								command.setText( history.get(history_index));
+								String str =  history.get(history_index);
+								
+								command.setText( str );
+								
+								command.setSelection( str.length());
 								
 								e.doit = false;
 							}
@@ -816,9 +816,21 @@ XMWebUIPluginView
 								
 								command.setText( history.get(history_index));
 								
+								command.setSelection( command.getText().length());
+								
 								e.doit = false;
 							}
-						}else if ( code == '\r' ){
+						}
+					}
+					
+					@Override
+					public void
+					keyReleased(
+						KeyEvent e )
+					{
+						int	code = e.keyCode;
+						
+						if ( code == '\r' ){
 						
 							String str = command.getText().trim();
 							
@@ -926,6 +938,10 @@ XMWebUIPluginView
 					
 					rc.pairing( str.substring( 7 ).trim());
 
+				}else if ( str.toLowerCase( Locale.US ).startsWith( "console " )){
+						
+					rc.console(  str.substring( 7 ).trim());
+					
 				}else{
 					
 					logError( "Unrecognized command '" + str + "'" );
@@ -1280,6 +1296,7 @@ XMWebUIPluginView
 	AccountConfig
 		implements XMClientAccount
 	{
+		private String		uid;
 		private String		access_code;
 		private String		description;
 		private boolean		basic_enabled;
@@ -1293,6 +1310,7 @@ XMWebUIPluginView
 		AccountConfig(
 			String	_ac )
 		{
+			uid				= Base32.encode( RandomUtils.nextSecureHash());
 			access_code		= _ac;
 			description		= "";
 			basic_enabled	= true;
@@ -1308,6 +1326,13 @@ XMWebUIPluginView
 		
 			throws IOException
 		{
+			uid 	= MapUtils.getMapString( map, "uid", null );
+			
+			if ( uid == null ){
+				
+				uid = Base32.encode( RandomUtils.nextSecureHash());
+			}
+			
 			access_code 	= MapUtils.getMapString( map, "ac", null );
 			description 	= MapUtils.getMapString( map, "desc", "" );
 			basic_enabled 	= MapUtils.getMapBoolean( map, "basic_enable", true );
@@ -1325,6 +1350,7 @@ XMWebUIPluginView
 		{
 			Map	map = new HashMap();
 			
+			MapUtils.setMapString( map, "uid", uid );
 			MapUtils.setMapString( map, "ac", access_code );
 			MapUtils.setMapString( map, "desc", description );
 			MapUtils.exportBooleanAsLong( map, "basic_enable", basic_enabled );
@@ -1335,6 +1361,12 @@ XMWebUIPluginView
 			MapUtils.setMapString( map, "secure_password", secure_password );
 
 			return( map );
+		}
+		
+		public String
+		getUID()
+		{
+			return( uid );
 		}
 		
 		@Override
@@ -1818,7 +1850,46 @@ XMWebUIPluginView
 				
 				throw( new XMRPCClientException( "RPC call failed: " + result ));
 			}
-		}					
+		}	
+		
+		private void
+		console(
+			String	cmd_line )
+		
+			throws XMRPCClientException
+		{
+			JSONObject	request = new JSONObject();
+						
+			request.put( "method", "bigly-console" );
+					
+			Map request_args = new HashMap();
+			
+			request.put( "arguments", request_args );
+				
+			request_args.put( "instance_id", getUID());
+			
+			request_args.put( "cmd", cmd_line );
+
+			JSONObject reply = call( request );
+			
+			String result = (String)reply.get( "result" );
+			
+			if ( result.equals( "success" )){
+						
+				Map reply_args = (Map)reply.get( "arguments" );
+				
+				List<String> lines = (List<String>)reply_args.get( "lines" );
+				
+				for ( String line: lines ){
+					
+					log( line );
+				}
+			}else{
+				
+				throw( new XMRPCClientException( "RPC call failed: " + result ));
+			}
+		}	
+		
 	}
 	
 	private class

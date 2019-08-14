@@ -69,6 +69,12 @@ XMClientConnection
 	}
 	
 	public String
+	getUID()
+	{
+		return( account.getUID());
+	}
+	
+	public String
 	getAccessCode()
 	{
 		return( account.getAccessCode());
@@ -326,10 +332,11 @@ XMClientConnection
 	{
 		connection_state = type;
 		
+		String	rem_bigly_version	= (String)args.get( "biglybt-version" );
 		String	rem_az_version 		= (String)args.get( "az-version" );
 		String	rem_plug_version 	= (String)args.get( "version" );
 		
-		log( "    Connected: Remote client version=" + rem_az_version + ", plugin=" + rem_plug_version );
+		log( "    Connected: Remote client version=" + (rem_bigly_version!=null?rem_bigly_version:rem_az_version) + ", plugin=" + rem_plug_version );
 
 	}
 	
