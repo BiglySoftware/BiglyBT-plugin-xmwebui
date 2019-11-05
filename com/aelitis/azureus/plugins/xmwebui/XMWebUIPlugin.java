@@ -4353,7 +4353,9 @@ XMWebUIPlugin
 				String marker = Base32.encode(RandomUtils.nextSecureHash());
 				
 				console_out_stream.write( ("echo " + marker + "\n" ).getBytes( Constants.UTF_8 ));
-								
+						
+				console_out_stream.flush();
+				
 				while( true ){
 					
 					if ( !console_sem.reserve(5000)){
@@ -4458,9 +4460,9 @@ XMWebUIPlugin
 				console_contexts.put( uid, console );
 			}
 		}
-
-		List<String>	lines = console.process( args );
 		
+		List<String>	lines = console.process( args );
+				
 		result.put( "lines", lines );
 	}
 	
