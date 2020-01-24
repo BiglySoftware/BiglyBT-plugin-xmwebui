@@ -362,7 +362,7 @@ TransmissionRemote.prototype =
 		// >> Vuze: fill in default options
 		if (typeof options !== "object" || options == null) {
 			options = {
-				'download-dir' : $("#download-dir").val(),
+				destination : $("#download-dir").val(),
 				paused : !transmission.shouldAddedTorrentsStart()
 			};
 		}

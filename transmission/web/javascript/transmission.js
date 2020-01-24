@@ -1345,7 +1345,7 @@ Transmission.prototype =
 				// Vuze: Rev 14090 added code which is almost the same as remote.addTorrentByUrl
 				remote.addTorrentByUrl($('#torrent_upload_url').val(), {
 					paused : paused,
-					'download-dir' : destination
+					'destination' : destination
 				});
 			}
 		}
