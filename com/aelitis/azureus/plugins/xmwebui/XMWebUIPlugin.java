@@ -122,7 +122,7 @@ import com.biglybt.util.PlayUtils;
 public class 
 XMWebUIPlugin
 	extends WebPlugin
-	implements UnloadablePlugin, DownloadManagerListener
+	implements UnloadablePlugin, DownloadManagerListener, DownloadWillBeAddedListener
 {	
 	
 	/**
@@ -174,11 +174,13 @@ XMWebUIPlugin
     
     private boolean	view_mode;
     
-    BooleanParameter trace_param;
+    protected BooleanParameter trace_param;
+    
     private BooleanParameter hide_ln_param;
-		private DirectoryParameter webdir_param;
-		private HyperlinkParameter openui_param;
-		private HyperlinkParameter launchAltWebUI_param;
+    private BooleanParameter force_net_param;
+    private DirectoryParameter webdir_param;
+    private HyperlinkParameter openui_param;
+    private HyperlinkParameter launchAltWebUI_param;
 
     private TorrentAttribute	t_id;
     
@@ -278,7 +280,7 @@ XMWebUIPlugin
 
 		log = plugin_interface.getLogger().getChannel( "xmwebui" );
 		defaults.put(PR_LOG, log);
-
+		
 		final PluginConfig pluginconfig = plugin_interface.getPluginconfig();
 		
 		if (	!PairingManagerFactory.getSingleton().isEnabled() && 
@@ -336,6 +338,8 @@ XMWebUIPlugin
 		config.addLabelParameter2( "xmwebui.blank" );
 
 		hide_ln_param = config.addBooleanParameter2( "xmwebui.hidelownoise", "xmwebui.hidelownoise", true );
+
+		force_net_param = config.addBooleanParameter2( "xmwebui.forcenets", "xmwebui.forcenets", false );
 
 		trace_param = config.addBooleanParameter2( "xmwebui.trace", "xmwebui.trace", false );
 		
@@ -395,10 +399,14 @@ XMWebUIPlugin
 
 			setViewMode();
 		}
-				
-		plugin_interface.getDownloadManager().addListener( this );
+
+		com.biglybt.pif.download.DownloadManager dm = plugin_interface.getDownloadManager();
 		
-		plugin_interface.getDownloadManager().addDownloadStubListener(
+		dm.addDownloadWillBeAddedListener( this );
+
+		dm.addListener( this );
+		
+		dm.addDownloadStubListener(
 			new DownloadStubListener()
 			{	
 				@Override
@@ -760,8 +768,12 @@ XMWebUIPlugin
 			
 			search_timer = null;
 		}
+
+		com.biglybt.pif.download.DownloadManager dm = plugin_interface.getDownloadManager();
 		
-		plugin_interface.getDownloadManager().removeListener( this );
+		dm.removeDownloadWillBeAddedListener( this );
+
+		dm.removeListener( this );
 
 		if ( json_rpc_client != null ){
 		
@@ -1340,37 +1352,64 @@ XMWebUIPlugin
 
 	private static Object add_torrent_lock = new Object();
 	
+	private ByteArrayHashMap<DownloadWillBeAddedListener>	add_torrent_listeners = new ByteArrayHashMap<>();
+	
+	@Override
+	public void initialised(Download dlAdding) {
+		
+		DownloadWillBeAddedListener listener;
+		
+		synchronized( add_torrent_lock ){
+			
+			listener = add_torrent_listeners.remove( dlAdding.getTorrent().getHash());
+		}
+		
+		if ( listener != null ){
+			
+			listener.initialised(dlAdding);
+		}
+	}
+	
 	protected Download
 	addTorrent(
-		final Torrent		torrent,
-		File download_dir,
-		boolean		add_stopped,
-		final DownloadWillBeAddedListener listener)
+		Torrent						torrent,
+		File 						download_dir,
+		boolean						add_stopped,
+		DownloadWillBeAddedListener listener)
 	
 		throws DownloadException
 	{
 		synchronized( add_torrent_lock ){
 
-			
-			final com.biglybt.pif.download.DownloadManager dm = plugin_interface.getDownloadManager();
-			
+			com.biglybt.pif.download.DownloadManager dm = plugin_interface.getDownloadManager();			
 			
 			Download download = dm.getDownload( torrent );
 			
 			if ( download == null ){
 
-				if (listener != null) {
-  				dm.addDownloadWillBeAddedListener(new DownloadWillBeAddedListener() {
-  					@Override
-					  public void initialised(Download dlAdding) {
-  						boolean b = Arrays.equals(dlAdding.getTorrent().getHash(), torrent.getHash());
-  						if (b) {
-  							dm.removeDownloadWillBeAddedListener(this);
-  							listener.initialised(dlAdding);
-  						}
-  					}
-  				});
-				}
+				DownloadWillBeAddedListener my_listener = 
+					new DownloadWillBeAddedListener()
+					{
+						@Override
+						public void 
+						initialised(
+							Download download)
+						{
+							if ( listener != null ){
+								
+								listener.initialised(download);
+							}
+							
+							if ( force_net_param.getValue()){
+								
+								TorrentAttribute ta = plugin_interface.getTorrentManager().getAttribute( TorrentAttribute.TA_NETWORKS );
+									
+								download.setListAttribute( ta, AENetworkClassifier.getDefaultNetworks());
+							}
+						}
+					};
+					
+				add_torrent_listeners.put( torrent.getHash(), my_listener );
 
 				if ( add_stopped ){
 					
