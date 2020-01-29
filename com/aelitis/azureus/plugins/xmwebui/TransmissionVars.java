@@ -67,6 +67,8 @@ public class TransmissionVars
 
 	public static final String TR_PREFS_KEY_BLOCKLIST_URL = "blocklist-url";
 
+	public static final String TR_PREFS_KEY_BLOCKLIST_SIZE = "blocklist-size";
+
 	public static final String TR_PREFS_KEY_MAX_CACHE_SIZE_MB = "cache-size-mb";
 
 	public static final String TR_PREFS_KEY_DHT_ENABLED = "dht-enabled";
@@ -315,6 +317,8 @@ public class TransmissionVars
 	public static final String FIELD_TORRENT_FILESTATS = "fileStats";
 
 	public static final String FIELD_TORRENT_TAG_UIDS = "tag-uids";
+
+	public static final String FIELD_TORRENT_LABELS = "labels";
 
 	public static final String FIELD_LAST_UPDATED = "LastUpdated";
 
