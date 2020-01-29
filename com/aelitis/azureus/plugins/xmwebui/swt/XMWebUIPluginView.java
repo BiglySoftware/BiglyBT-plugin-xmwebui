@@ -35,6 +35,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 
+import com.biglybt.ui.swt.ListenerGetOffSWT;
 import com.biglybt.util.MapUtils;
 import org.eclipse.swt.SWT;
 import org.eclipse.swt.custom.StyleRange;
@@ -708,27 +709,20 @@ XMWebUIPluginView
 			Messages.setLanguageText( status_button, "xmwebui.rpc.status" );
 
 
-			status_button.addSelectionListener(
-					new SelectionAdapter()
-					{
-						@Override
-						public void
-						widgetSelected(
-							SelectionEvent event ) 
-						{
-							RemoteConnection rc = getCurrentRemoteConnection();
+			status_button.addListener(SWT.Selection,
+					(ListenerGetOffSWT) event -> {
+						RemoteConnection rc = getCurrentRemoteConnection();
+						
+						if ( rc != null ){
 							
-							if ( rc != null ){
+							try{
+								Map map = rc.getRPCStatus();
 								
-								try{
-									Map map = rc.getRPCStatus();
-									
-									log( map.toString());
-									
-								}catch( Throwable e ){
-									
-									logError( e );
-								}
+								log( map.toString());
+								
+							}catch( Throwable e ){
+								
+								logError( e );
 							}
 						}
 					});
