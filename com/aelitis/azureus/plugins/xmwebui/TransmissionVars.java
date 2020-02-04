@@ -587,6 +587,8 @@ public class TransmissionVars
 
 	public static final String ARG_TORRENT_GET_FILE_FIELDS = "file-fields";
 
+	public static final String ARG_TORRENT_GET_PEER_FIELDS = "peer-fields";
+
 	public static final String ARG_IDS = "ids";
 
 	public static final String ARG_FIELDS = "fields";

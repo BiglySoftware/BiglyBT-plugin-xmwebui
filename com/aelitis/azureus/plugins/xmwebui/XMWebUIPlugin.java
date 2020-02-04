@@ -101,6 +101,7 @@ XMWebUIPlugin
 {	
 	
 	/**
+	 * <pre>
 	 * 5: No longer xml escapes strings when user agent does not start with "Mozilla/"
 	 *
 	 * 6: handle more of session-set
@@ -113,13 +114,17 @@ XMWebUIPlugin
 	 *                 They keys to the array are sent as "fileKeys"
 	 *    "flagStr" in peers map is mostly implemented
 	 *    
-	 * 8: change "speedHistory" field of "torrent-get" return value from:
-	 *    [ [ send-bytes, receive-bytes, swarm-bytes] , [...] ]
-	 *    to:
-	 *      [ 
-	 *         { "timestamp" : unix-timestamp, "upload" : send-bytes , "download" : receive-bytes, "swarm" : swarm-bytes },
-	 *         ...
-	 *      ]
+	 * 8: 
+	 *    * change "speedHistory" field of "torrent-get" return value from:
+	 *      [ [ send-bytes, receive-bytes, swarm-bytes] , [...] ]
+	 *      to:
+	 *        [ 
+	 *           { "timestamp" : unix-timestamp, "upload" : send-bytes , "download" : receive-bytes, "swarm" : swarm-bytes },
+	 *           ...
+	 *        ]
+	 *    * Add "peer-fields" to torrent-get, allowing ability to limit fields 
+	 *      sent from "peers" field 
+	 * </pre>
 	 */
 	public static final int VUZE_RPC_VERSION = 8;
 

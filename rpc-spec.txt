@@ -223,6 +223,11 @@
    eta                         | number                      | tr_stat
    etaIdle                     | number                      | tr_stat
    files                       | array (see below)           | n/a
+>>> BiglyBT
+   file-fields                 | array of "files" fields to return in "files" map
+                               | if missing, all files fields are returned 
+                               | (when "files" is in the "fields" list)
+<<< BiglyBT
    fileStats                   | array (see below)           | n/a
    hashString                  | string                      | tr_info
    haveUnchecked               | number                      | tr_stat
@@ -241,6 +246,11 @@
    name                        | string                      | tr_info
    peer-limit                  | number                      | tr_torrent
    peers                       | array (see below)           | n/a
+>>> BiglyBT
+   peer-fields                 | array of "peers" fields to return in "peers" map
+                               | if missing, all peers fields are returned 
+                               | (when "peers" is in the "fields" list)
+<<< BiglyBT
    peersConnected              | number                      | tr_stat
    peersFrom                   | object (see below)          | n/a
    peersGettingFromUs          | number                      | tr_stat

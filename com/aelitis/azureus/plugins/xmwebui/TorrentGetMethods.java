@@ -65,6 +65,10 @@ public class TorrentGetMethods
 
 	private final static Map<String, Map<Long, String>> session_torrent_info_cache = new HashMap<>();
 
+	private static boolean canAdd(String key, List<String> fields, boolean all) {
+		return all || Collections.binarySearch(fields, key) >= 0;
+	}
+
 	private static int[] getFileIndexes(Map args, long download_id) {
 		Object file_ids = args.get("file-indexes-" + download_id);
 		int[] file_indexes = null;
@@ -268,6 +272,13 @@ public class TorrentGetMethods
 					peers_from_us++;
 				}
 			}
+		}
+
+		//noinspection unchecked
+		List<String> peer_fields = (List<String>) args.get(
+				ARG_TORRENT_GET_PEER_FIELDS);
+		if (peer_fields != null) {
+			Collections.sort(peer_fields);
 		}
 
 		for (String field : fields) {
@@ -590,7 +601,7 @@ public class TorrentGetMethods
 				case FIELD_TORRENT_PEERS:
 					// RPC v2
 
-					value = torrentGet_peers(core_download);
+					value = torrentGet_peers(core_download, peer_fields);
 
 					break;
 				case "peersConnected":
@@ -1462,17 +1473,14 @@ public class TorrentGetMethods
 			List<String> sortedFields, DiskManagerFileInfo file) {
 		boolean all = sortedFields == null || sortedFields.size() == 0;
 
-		if (all || Collections.binarySearch(sortedFields,
-				FIELD_FILESTATS_BYTES_COMPLETED) >= 0) {
+		if (canAdd(FIELD_FILESTATS_BYTES_COMPLETED, sortedFields, all)) {
 			map.put(FIELD_FILESTATS_BYTES_COMPLETED, file.getDownloaded());
 		}
-		if (all || Collections.binarySearch(sortedFields,
-				FIELD_FILESTATS_WANTED) >= 0) {
+		if (canAdd(FIELD_FILESTATS_WANTED, sortedFields, all)) {
 			map.put(FIELD_FILESTATS_WANTED, !file.isSkipped());
 		}
 
-		if (all || Collections.binarySearch(sortedFields,
-				FIELD_FILESTATS_PRIORITY) >= 0) {
+		if (canAdd(FIELD_FILESTATS_PRIORITY, sortedFields, all)) {
 			map.put(FIELD_FILESTATS_PRIORITY,
 					convertVuzePriority(file.getNumericPriority()));
 		}
@@ -1501,20 +1509,17 @@ public class TorrentGetMethods
 
 		boolean all = sortedFields == null || sortedFields.size() == 0;
 
-		if (all || Collections.binarySearch(sortedFields,
-				FIELD_FILESTATS_BYTES_COMPLETED) >= 0) {
+		if (canAdd(FIELD_FILESTATS_BYTES_COMPLETED, sortedFields, all)) {
 
 			long downloaded = len < 0 ? 0 : len;
 
 			map.put(FIELD_FILESTATS_BYTES_COMPLETED, downloaded);
 		}
-		if (all || Collections.binarySearch(sortedFields,
-				FIELD_FILESTATS_WANTED) >= 0) {
+		if (canAdd(FIELD_FILESTATS_WANTED, sortedFields, all)) {
 			map.put(FIELD_FILESTATS_WANTED, len >= 0);
 		}
 
-		if (all || Collections.binarySearch(sortedFields,
-				FIELD_FILESTATS_PRIORITY) >= 0) {
+		if (canAdd(FIELD_FILESTATS_PRIORITY, sortedFields, all)) {
 			map.put(FIELD_FILESTATS_PRIORITY, convertVuzePriority(0));
 		}
 	}
@@ -1537,15 +1542,13 @@ public class TorrentGetMethods
 
 		boolean all = sortedFields == null || sortedFields.size() == 0;
 
-		if (all || Collections.binarySearch(sortedFields,
-				FIELD_FILESTATS_BYTES_COMPLETED) >= 0) {
+		if (canAdd(FIELD_FILESTATS_BYTES_COMPLETED, sortedFields, all)) {
 			map.put(FIELD_FILESTATS_BYTES_COMPLETED, downloaded); // this must be a spec error...
 		}
-		if (all
-				|| Collections.binarySearch(sortedFields, FIELD_FILES_LENGTH) >= 0) {
+		if (canAdd(FIELD_FILES_LENGTH, sortedFields, all)) {
 			map.put(FIELD_FILES_LENGTH, len);
 		}
-		if (all || Collections.binarySearch(sortedFields, FIELD_FILES_NAME) >= 0) {
+		if (canAdd(FIELD_FILES_NAME, sortedFields, all)) {
 			map.put(FIELD_FILES_NAME, sf.getFile().getName());
 		}
 		if (sortedFields != null
@@ -1657,15 +1660,13 @@ public class TorrentGetMethods
 			String baseURL, Download download, DiskManagerFileInfo file) {
 		boolean all = sortedFields == null || sortedFields.size() == 0;
 		File realFile = null;
-		if (all || Collections.binarySearch(sortedFields,
-				FIELD_FILESTATS_BYTES_COMPLETED) >= 0) {
+		if (canAdd(FIELD_FILESTATS_BYTES_COMPLETED, sortedFields, all)) {
 			obj.put(FIELD_FILESTATS_BYTES_COMPLETED, file.getDownloaded()); // this must be a spec error...
 		}
-		if (all
-				|| Collections.binarySearch(sortedFields, FIELD_FILES_LENGTH) >= 0) {
+		if (canAdd(FIELD_FILES_LENGTH, sortedFields, all)) {
 			obj.put(FIELD_FILES_LENGTH, file.getLength());
 		}
-		if (all || Collections.binarySearch(sortedFields, FIELD_FILES_NAME) >= 0) {
+		if (canAdd(FIELD_FILES_NAME, sortedFields, all)) {
 			Torrent torrent = download.getTorrent();
 			boolean simpleTorrent = torrent != null && torrent.isSimpleTorrent();
 			realFile = file.getFile(true);
@@ -1693,8 +1694,7 @@ public class TorrentGetMethods
 		if (sortedFields != null) {
 			boolean showAllVuze = sortedFields.size() == 0;
 
-			if (showAllVuze || Collections.binarySearch(sortedFields,
-					FIELD_FILES_CONTENT_URL) >= 0) {
+			if (canAdd(FIELD_FILES_CONTENT_URL, sortedFields, showAllVuze)) {
 				URL f_stream_url = PlayUtils.getMediaServerContentURL(file);
 				if (f_stream_url != null) {
 					String s = adjustURL(host, f_stream_url);
@@ -1705,8 +1705,7 @@ public class TorrentGetMethods
 				}
 			}
 
-			if (showAllVuze || Collections.binarySearch(sortedFields,
-					FIELD_FILES_FULL_PATH) >= 0) {
+			if (canAdd(FIELD_FILES_FULL_PATH, sortedFields, showAllVuze)) {
 				if (realFile == null) {
 					realFile = file.getFile(true);
 				}
@@ -1826,7 +1825,8 @@ public class TorrentGetMethods
 		return value;
 	}
 
-	private static List torrentGet_peers(DownloadManager core_download) {
+	private static List torrentGet_peers(DownloadManager core_download,
+			List<String> sortedFields) {
 		// peers              | array of objects, each containing:   |
 		// +-------------------------+------------+
 		// | address                 | string     | tr_peer_stat | x
@@ -1856,6 +1856,9 @@ public class TorrentGetMethods
 		if (pm == null) {
 			return peers;
 		}
+
+		boolean all = sortedFields == null || sortedFields.size() == 0;
+
 		List<PEPeer> peerList = pm.getPeers();
 		for (PEPeer peer : peerList) {
 			Map<String, Object> map = new HashMap<>();
@@ -1872,84 +1875,124 @@ public class TorrentGetMethods
 			boolean isUTP = peer.getProtocol().equals("uTP");
 			boolean isUploadingTo = stats.getDataSendRate() > 0;
 
-			map.put(FIELD_PEERS_ADDRESS, peer.getIp());
-			map.put(FIELD_PEERS_CLIENT_NAME, peer.getClient());
-			map.put(FIELD_PEERS_CLIENT_CHOKED, peer.isChokedByMe());
-			map.put(FIELD_PEERS_CLIENT_INTERESTED, peer.isInterested());
-
-			map.put("state", peer.getPeerState());
-
-			// flagStr
-			// "O": "Optimistic unchoke"
-			// +"D": "Downloading from this peer"
-			// +"d": "We would download from this peer if they'd let us"
-			// +"U": "Uploading to peer"
-			// "u": "We would upload to this peer if they'd ask"
-			// +"K": "Peer has unchoked us, but we're not interested"
-			// +"?": "We unchoked this peer, but they're not interested"
-			// +"E": "Encrypted Connection"
-			// +"H": "Peer was discovered through Distributed Hash Table (DHT)"
-			// +"X": "Peer was discovered through Peer Exchange (PEX)"
-			// +"I": "Peer is an incoming connection"
-			// +"T": "Peer is connected via uTP"
-			//TODO
-			StringBuilder flagStr = new StringBuilder();
-
-			if (isDownloadingFrom) {
-				flagStr.append('D');
-			} else if (peer.isDownloadPossible()) {
-				flagStr.append("d");
+			if (canAdd(FIELD_PEERS_ADDRESS, sortedFields, all)) {
+				map.put(FIELD_PEERS_ADDRESS, peer.getIp());
 			}
-			if (isUploadingTo) {
-				flagStr.append("U");
+			if (canAdd(FIELD_PEERS_CLIENT_NAME, sortedFields, all)) {
+				map.put(FIELD_PEERS_CLIENT_NAME, peer.getClient());
 			}
-			if (!peer.isChokingMe() && !peer.isInteresting()) {
-				flagStr.append("K");
+			if (canAdd(FIELD_PEERS_CLIENT_CHOKED, sortedFields, all)) {
+				map.put(FIELD_PEERS_CLIENT_CHOKED, peer.isChokedByMe());
 			}
-			if (!peer.isChokedByMe() && !peer.isInterested()) {
-				flagStr.append("?");
-			}
-			if (isEncrypted) {
-				flagStr.append("E");
-			}
-			String source = peer.getPeerSource();
-			switch (source) {
-				case PEPeerSource.PS_DHT:
-					flagStr.append('H');
-					break;
-				case PEPeerSource.PS_OTHER_PEER:
-					flagStr.append('X');
-					break;
-				case PEPeerSource.PS_BT_TRACKER: // XXX PS_INCOMING
-					flagStr.append('I');
-					break;
-			}
-			if (isUTP) {
-				flagStr.append("T");
+			if (canAdd(FIELD_PEERS_CLIENT_INTERESTED, sortedFields, all)) {
+				map.put(FIELD_PEERS_CLIENT_INTERESTED, peer.isInterested());
 			}
 
-			map.put(FIELD_PEERS_FLAGSTR, flagStr.toString());
-
-			// code, name
-			String[] countryDetails = PeerUtils.getCountryDetails(peer);
-			if (countryDetails != null && countryDetails.length > 0) {
-				map.put(FIELD_PEERS_CC, countryDetails[0]);
+			if (canAdd("state", sortedFields, all)) {
+				map.put("state", peer.getPeerState());
 			}
 
-			map.put(FIELD_PEERS_IS_DLING_FROM, isDownloadingFrom);
-			map.put(FIELD_PEERS_IS_ENCRYPTED, isEncrypted);
-			map.put(FIELD_PEERS_IS_INCOMING, peer.isIncoming());
-			map.put(FIELD_PEERS_IS_ULING_TO, isUploadingTo);
+			if (canAdd("source", sortedFields, all)) {
+				map.put("source", peer.getPeerSource());
+			}
+
+			if (canAdd(FIELD_PEERS_FLAGSTR, sortedFields, all)) {
+				// flagStr
+				// "O": "Optimistic unchoke"
+				// +"D": "Downloading from this peer"
+				// +"d": "We would download from this peer if they'd let us"
+				// +"U": "Uploading to peer"
+				// "u": "We would upload to this peer if they'd ask"
+				// +"K": "Peer has unchoked us, but we're not interested"
+				// +"?": "We unchoked this peer, but they're not interested"
+				// +"E": "Encrypted Connection"
+				// +"H": "Peer was discovered through Distributed Hash Table (DHT)"
+				// +"X": "Peer was discovered through Peer Exchange (PEX)"
+				// +"I": "Peer is an incoming connection"
+				// +"T": "Peer is connected via uTP"
+				//TODO
+				StringBuilder flagStr = new StringBuilder();
+
+				if (isDownloadingFrom) {
+					flagStr.append('D');
+				} else if (peer.isDownloadPossible()) {
+					flagStr.append("d");
+				}
+				if (isUploadingTo) {
+					flagStr.append("U");
+				}
+				if (!peer.isChokingMe() && !peer.isInteresting()) {
+					flagStr.append("K");
+				}
+				if (!peer.isChokedByMe() && !peer.isInterested()) {
+					flagStr.append("?");
+				}
+				if (isEncrypted) {
+					flagStr.append("E");
+				}
+				String source = peer.getPeerSource();
+				switch (source) {
+					case PEPeerSource.PS_DHT:
+						flagStr.append('H');
+						break;
+					case PEPeerSource.PS_OTHER_PEER:
+						flagStr.append('X');
+						break;
+					case PEPeerSource.PS_BT_TRACKER: // XXX PS_INCOMING
+						flagStr.append('I');
+						break;
+				}
+				if (isUTP) {
+					flagStr.append("T");
+				}
+
+				map.put(FIELD_PEERS_FLAGSTR, flagStr.toString());
+			}
+
+			if (canAdd(FIELD_PEERS_CC, sortedFields, all)) {
+				// code, name
+				String[] countryDetails = PeerUtils.getCountryDetails(peer);
+				map.put(FIELD_PEERS_CC,
+						countryDetails != null && countryDetails.length > 0
+								? countryDetails[0] : "");
+			}
+
+			if (canAdd(FIELD_PEERS_IS_DLING_FROM, sortedFields, all)) {
+				map.put(FIELD_PEERS_IS_DLING_FROM, isDownloadingFrom);
+			}
+			if (canAdd(FIELD_PEERS_IS_ENCRYPTED, sortedFields, all)) {
+				map.put(FIELD_PEERS_IS_ENCRYPTED, isEncrypted);
+			}
+			if (canAdd(FIELD_PEERS_IS_INCOMING, sortedFields, all)) {
+				map.put(FIELD_PEERS_IS_INCOMING, peer.isIncoming());
+			}
+			if (canAdd(FIELD_PEERS_IS_ULING_TO, sortedFields, all)) {
+				map.put(FIELD_PEERS_IS_ULING_TO, isUploadingTo);
+			}
 			// RPC v13
-			map.put(FIELD_PEERS_IS_UTP, isUTP);
-			map.put(FIELD_PEERS_PEER_CHOKED, peer.isChokingMe());
-			map.put(FIELD_PEERS_PEER_INTERESTED, peer.isInteresting());
+			if (canAdd(FIELD_PEERS_IS_UTP, sortedFields, all)) {
+				map.put(FIELD_PEERS_IS_UTP, isUTP);
+			}
+			if (canAdd(FIELD_PEERS_PEER_CHOKED, sortedFields, all)) {
+				map.put(FIELD_PEERS_PEER_CHOKED, peer.isChokingMe());
+			}
+			if (canAdd(FIELD_PEERS_PEER_INTERESTED, sortedFields, all)) {
+				map.put(FIELD_PEERS_PEER_INTERESTED, peer.isInteresting());
+			}
 			// RPC v3
-			map.put(FIELD_PEERS_PORT, peer.getPort());
-			map.put(FIELD_PEERS_PROGRESS,
-					peer.getPercentDoneInThousandNotation() / 1000.0);
-			map.put(FIELD_PEERS_RATE_TO_CLIENT_BPS, stats.getDataReceiveRate());
-			map.put(FIELD_PEERS_RATE_TO_PEER_BPS, stats.getDataSendRate());
+			if (canAdd(FIELD_PEERS_PORT, sortedFields, all)) {
+				map.put(FIELD_PEERS_PORT, peer.getPort());
+			}
+			if (canAdd(FIELD_PEERS_PROGRESS, sortedFields, all)) {
+				map.put(FIELD_PEERS_PROGRESS,
+						peer.getPercentDoneInThousandNotation() / 1000.0);
+			}
+			if (canAdd(FIELD_PEERS_RATE_TO_CLIENT_BPS, sortedFields, all)) {
+				map.put(FIELD_PEERS_RATE_TO_CLIENT_BPS, stats.getDataReceiveRate());
+			}
+			if (canAdd(FIELD_PEERS_RATE_TO_PEER_BPS, sortedFields, all)) {
+				map.put(FIELD_PEERS_RATE_TO_PEER_BPS, stats.getDataSendRate());
+			}
 		}
 
 		return peers;
