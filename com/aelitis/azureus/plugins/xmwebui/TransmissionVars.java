@@ -1,7 +1,7 @@
 package com.aelitis.azureus.plugins.xmwebui;
 
 /**
- * Variables converted from https://trac.transmissionbt.com/browser/trunk/libtransmission/transmission.h
+ * Variables converted from https://github.com/transmission/transmission/blob/master/libtransmission/transmission.h
  * Comments also from .h file
  * 
  * Not sure if I need it, but here's the header of transmission.h:

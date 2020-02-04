@@ -225,7 +225,16 @@
    files                       | array (see below)           | n/a
 >>> BiglyBT
    file-fields                 | array of "files" fields to return in "files" map
-                               | if missing, all files fields are returned 
+                               | If missing, all files fields are returned 
+                               | (when "files" is in the "fields" list)
+   files-hc-<torrentid>        | array of string
+                               | A hashcode for each file (length must be # of files in torrent)
+                               | File will only be returned in "files" if the file has changed.
+                               | (when "files" is in the "fields" list)
+   file-indexes-<torrentid>    | array of number
+                               | "files" result will only contain files at
+                               | the indexes specified
+                               | If missing, all files will be returned
                                | (when "files" is in the "fields" list)
 <<< BiglyBT
    fileStats                   | array (see below)           | n/a
@@ -292,6 +301,23 @@
                       | bytesCompleted          | number     | tr_torrent
                       | length                  | number     | tr_info
                       | name                    | string     | tr_info
+>>> BiglyBT
+                      | index                   | number     | file #
+                      |                                      | Useful if you requested a subset of files
+                      | eta                     | number     | eta in seconds to file completion
+                      | contentURL              | string     | Streaming URL
+                      | fullPath                | string     | Absolute path to file
+                      | hc                      | string     | hashcode for all fields requested.
+                                                             | In future calls to torrent-get, adding a key "files-hc-<torrentid>"
+                                                             | with a value of an array (length=# files in torrent). Each entry
+                                                             | is a hc value. RPC will not return that file if nothing changed.
+                      |--------------------------------------|
+                      | You can also request fields from     |
+                      | "fileStats".                         |
+                      | "name" field is relative to          |
+                      | "downloadDir", or absolute if file   |
+                      | has been moved outside of path.      | 
+<<< BiglyBT
    -------------------+--------------------------------------+
    fileStats          | a file's non-constant properties.    |
                       | array of tr_info.filecount objects,  |
