@@ -35,6 +35,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 
+import com.aelitis.azureus.plugins.xmwebui.TransmissionVars;
 import com.biglybt.ui.swt.ListenerGetOffSWT;
 import com.biglybt.util.MapUtils;
 import org.eclipse.swt.SWT;
@@ -1539,7 +1540,7 @@ XMWebUIPluginView
 			
 			List fields = new ArrayList();
 			
-			request_args.put( "fields", fields );
+			request_args.put(TransmissionVars.ARG_FIELDS, fields );
 			
 			fields.add( "name" );
 			

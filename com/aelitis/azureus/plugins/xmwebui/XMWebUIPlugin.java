@@ -25,8 +25,6 @@ package com.aelitis.azureus.plugins.xmwebui;
 import java.io.*;
 import java.net.*;
 import java.text.DateFormat;
-import java.text.NumberFormat;
-import java.text.ParseException;
 import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -42,13 +40,8 @@ import com.aelitis.azureus.plugins.remsearch.RemSearchPluginSearch;
 import com.biglybt.core.Core;
 import com.biglybt.core.CoreFactory;
 import com.biglybt.core.category.Category;
-import com.biglybt.core.category.CategoryManager;
 import com.biglybt.core.config.COConfigurationManager;
-import com.biglybt.core.disk.DiskManager;
-import com.biglybt.core.disk.DiskManagerPiece;
 import com.biglybt.core.download.DownloadManager;
-import com.biglybt.core.download.DownloadManagerState;
-import com.biglybt.core.download.DownloadManagerStats;
 import com.biglybt.core.global.GlobalManager;
 import com.biglybt.core.internat.MessageText;
 import com.biglybt.core.logging.LogAlert;
@@ -57,8 +50,6 @@ import com.biglybt.core.metasearch.*;
 import com.biglybt.core.metasearch.impl.web.WebEngine;
 import com.biglybt.core.pairing.PairingManager;
 import com.biglybt.core.pairing.PairingManagerFactory;
-import com.biglybt.core.peer.*;
-import com.biglybt.core.peer.util.PeerUtils;
 import com.biglybt.core.security.CryptoManager;
 import com.biglybt.core.subs.*;
 import com.biglybt.core.tag.*;
@@ -66,7 +57,6 @@ import com.biglybt.core.torrent.PlatformTorrentUtils;
 import com.biglybt.core.torrent.TOTorrent;
 import com.biglybt.core.torrent.TOTorrentFactory;
 import com.biglybt.core.tracker.TrackerPeerSource;
-import com.biglybt.core.tracker.client.*;
 import com.biglybt.core.util.*;
 import com.biglybt.core.vuzefile.VuzeFile;
 import com.biglybt.core.vuzefile.VuzeFileComponent;
@@ -74,9 +64,6 @@ import com.biglybt.core.vuzefile.VuzeFileHandler;
 import com.biglybt.pifimpl.local.PluginCoreUtils;
 import com.biglybt.pifimpl.local.torrent.TorrentImpl;
 import com.biglybt.pifimpl.local.utils.resourcedownloader.ResourceDownloaderFactoryImpl;
-import com.biglybt.plugin.startstoprules.defaultplugin.DefaultRankCalculator;
-import com.biglybt.plugin.startstoprules.defaultplugin.StartStopRulesDefaultPlugin;
-import com.biglybt.ui.console.ConsoleInput;
 import com.biglybt.ui.webplugin.WebPlugin;
 import com.biglybt.util.JSONUtils;
 import com.biglybt.util.MapUtils;
@@ -87,7 +74,6 @@ import com.biglybt.pif.config.ConfigParameter;
 import com.biglybt.pif.config.ConfigParameterListener;
 import com.biglybt.pif.disk.DiskManagerFileInfo;
 import com.biglybt.pif.download.*;
-import com.biglybt.pif.download.DownloadStub.DownloadStubFile;
 import com.biglybt.pif.logging.LoggerChannel;
 import com.biglybt.pif.torrent.*;
 import com.biglybt.pif.tracker.web.TrackerWebPageRequest;
@@ -105,9 +91,9 @@ import com.biglybt.pif.utils.resourcedownloader.ResourceDownloaderAdapter;
 import static com.aelitis.azureus.plugins.xmwebui.TransmissionVars.*;
 
 @SuppressWarnings({
-	"unchecked",
-	"rawtypes"
-})
+		"unchecked",
+		"rawtypes"
+		, "unused"})
 public class 
 XMWebUIPlugin
 	extends WebPlugin
@@ -126,8 +112,16 @@ XMWebUIPlugin
 	 *          false: Each file is an ordered array instead of a map.
 	 *                 They keys to the array are sent as "fileKeys"
 	 *    "flagStr" in peers map is mostly implemented
+	 *    
+	 * 8: change "speedHistory" field of "torrent-get" return value from:
+	 *    [ [ send-bytes, receive-bytes, swarm-bytes] , [...] ]
+	 *    to:
+	 *      [ 
+	 *         { "timestamp" : unix-timestamp, "upload" : send-bytes , "download" : receive-bytes, "swarm" : swarm-bytes },
+	 *         ...
+	 *      ]
 	 */
-	public static final int VUZE_RPC_VERSION = 7;
+	public static final int VUZE_RPC_VERSION = 8;
 
 	private static Download
 	destubbify(
@@ -147,19 +141,19 @@ XMWebUIPlugin
     static{
     	System.setProperty( "az.xmwebui.skip.ssl.hack", "true" );
     	
-        defaults.put( WebPlugin.PR_DISABLABLE, new Boolean( true ));
-        defaults.put( WebPlugin.PR_ENABLE, new Boolean( true ));
-        defaults.put( WebPlugin.PR_PORT, new Integer( DEFAULT_PORT ));
+        defaults.put( WebPlugin.PR_DISABLABLE, Boolean.TRUE);
+        defaults.put( WebPlugin.PR_ENABLE, Boolean.TRUE);
+        defaults.put( WebPlugin.PR_PORT, DEFAULT_PORT);
         defaults.put( WebPlugin.PR_ROOT_DIR, "transmission/web" );
-        defaults.put( WebPlugin.PR_ENABLE_KEEP_ALIVE, new Boolean(true));
-        defaults.put( WebPlugin.PR_HIDE_RESOURCE_CONFIG, new Boolean(true));
+        defaults.put( WebPlugin.PR_ENABLE_KEEP_ALIVE, Boolean.TRUE);
+        defaults.put( WebPlugin.PR_HIDE_RESOURCE_CONFIG, Boolean.TRUE);
         defaults.put( WebPlugin.PR_PAIRING_SID, "xmwebui" );
     }
 
     private static final String	SEARCH_PREFIX 	= "/psearch";
     private static final int	SEARCH_TIMEOUT	= 60*1000;
 
-		protected static final long SEARCH_AUTOREMOVE_TIMEOUT = 60 * 1000 * 60l;
+		protected static final long SEARCH_AUTOREMOVE_TIMEOUT = 60 * 1000 * 60L;
     
     private boolean	view_mode;
     
@@ -173,27 +167,25 @@ XMWebUIPlugin
 
     private TorrentAttribute	t_id;
     
-    private Map<Long,RecentlyRemovedData>	recently_removed 	= new HashMap<Long,RecentlyRemovedData>();
+    private final Map<Long,RecentlyRemovedData>	recently_removed 	= new HashMap<>();
     
-    private Set<Long>	stubbifying			= new HashSet<Long>();
+    private Collection<Long> stubbifying			= new HashSet<>();
     
-    private Map<String, String> ip_to_session_id = new HashMap<String, String>();
+    private final Map<String, String> ip_to_session_id = new HashMap<>();
     
     private RemSearchPluginPageGenerator search_handler;
     private TimerEventPeriodic				search_timer;
     
     private boolean							check_ids_outstanding = true;
     
-    private Map<String,Map<Long,String>>	session_torrent_info_cache = new HashMap<String,Map<Long,String>>();
+    private final Map<String,SearchInstance>	active_searches = new HashMap<>();
+    private final Map<String,TagSearchInstance>	active_tagsearches = new HashMap<>();
     
-    private Map<String,SearchInstance>	active_searches = new HashMap<String, SearchInstance>();
-    private Map<String,TagSearchInstance>	active_tagsearches = new HashMap<String, TagSearchInstance>();
-    
-    private Object			lifecycle_lock = new Object();
+    private final Object			lifecycle_lock = new Object();
     private int 			lifecycle_state = 0;
     private boolean			update_in_progress;
     
-    private List<MagnetDownload>		magnet_downloads = new ArrayList<XMWebUIPlugin.MagnetDownload>();
+    private final List<MagnetDownload>		magnet_downloads = new ArrayList<>();
     
     private Object json_rpc_client;	// Object during transition to core support
     
@@ -204,7 +196,7 @@ XMWebUIPlugin
 
 		private LoggerChannel log;
 
-		private Map<Long, Object> referenceKeeper = new LinkedHashMap<>();
+		final Map<Long, Object> referenceKeeper = new LinkedHashMap<>();
     
     public
     XMWebUIPlugin()
@@ -237,7 +229,7 @@ XMWebUIPlugin
 							String str )
 						{
 							XMWebUIPlugin.this.log( str );
-						};
+						}
 						
 						@Override
 						public void
@@ -246,7 +238,7 @@ XMWebUIPlugin
 							Throwable 	e )
 						{
 							XMWebUIPlugin.this.log( str, e );
-						};
+						}
 					},
 					SEARCH_PREFIX,
 					null,
@@ -315,10 +307,8 @@ XMWebUIPlugin
 		};
 		webdir_param.addListener(webdir_param_listener);
 		webdir_param_listener.parameterChanged(webdir_param);
-		config.createGroup("xmwebui.alternate.ui.group", new Parameter[] {
-				webdir_param,
-				launchAltWebUI_param
-		});
+		config.createGroup("xmwebui.alternate.ui.group", webdir_param,
+				launchAltWebUI_param);
 
 		//////
 
@@ -394,73 +384,58 @@ XMWebUIPlugin
 		dm.addListener( this );
 		
 		dm.addDownloadStubListener(
-			new DownloadStubListener()
-			{	
-				@Override
-				public void
-				downloadStubEventOccurred(
-					DownloadStubEvent event )
-						
-					throws DownloadException 
-				{
+				event -> {
 					int	event_type = event.getEventType();
 
 					List<DownloadStub> stubs = event.getDownloadStubs();
 
 					synchronized( recently_removed ){
 
-						if ( event_type == DownloadStubEvent.DSE_STUB_WILL_BE_ADDED ){
-																	
-							for ( DownloadStub stub: stubs ){
-								
-								try{
-									long id = destubbify( stub ).getLongAttribute( t_id );
-									
-									stubbifying.add( id );
-									
-									stub.setLongAttribute( t_id, id );
-									
-								}catch( Throwable e ){
-									
-									Debug.out( e );
-								}
-							}
-					
-						}else if ( event_type == DownloadStubEvent.DSE_STUB_ADDED ||  event_type == DownloadStubEvent.DSE_STUB_WILL_BE_REMOVED ){
+						switch (event_type) {
+							case DownloadStubEvent.DSE_STUB_WILL_BE_ADDED:
 
-							for ( DownloadStub stub: stubs ){
-								
-								long id = stub.getLongAttribute( t_id );
-									
-								stubbifying.remove( id );
-							}
+								for (DownloadStub stub : stubs) {
+
+									try {
+										long id = destubbify(stub).getLongAttribute(t_id);
+
+										stubbifying.add(id);
+
+										stub.setLongAttribute(t_id, id);
+
+									} catch (Throwable e) {
+
+										Debug.out(e);
+									}
+								}
+
+								break;
+							case DownloadStubEvent.DSE_STUB_ADDED:
+							case DownloadStubEvent.DSE_STUB_WILL_BE_REMOVED:
+
+								for (DownloadStub stub : stubs) {
+
+									long id = stub.getLongAttribute(t_id);
+
+									stubbifying.remove(id);
+								}
+								break;
 						}
 					}
-				}
-			}, false );
+				}, false );
 		
 		search_timer = SimpleTimer.addPeriodicEvent(
 			"XMSearchTimeout",
 			30*1000,
-			new TimerEventPerformer()
-			{
-				@Override
-				public void
-				perform(
-					TimerEvent event ) 
-				{
+				event -> {
 					Map<String,RemSearchPluginSearch> searches = search_handler.getSearches();
-					
-					Iterator<RemSearchPluginSearch> it1 = searches.values().iterator();
-						
-					while( it1.hasNext()){
-					
-						RemSearchPluginSearch search = it1.next();
-						
-						if ( search.getAge() > SEARCH_TIMEOUT ){
-																			
-							log( "Timeout: " + search.getString());
-							
+
+					for (RemSearchPluginSearch search : searches.values()) {
+
+						if (search.getAge() > SEARCH_TIMEOUT) {
+
+							log("Timeout: " + search.getString());
+
 							search.destroy();
 						}
 					}
@@ -487,8 +462,7 @@ XMWebUIPlugin
 					}
 					
 					cleanupReferenceKeeper();
-				}
-			});
+				});
 		
 		plugin_interface.addListener(
 			new PluginAdapter()
@@ -520,7 +494,7 @@ XMWebUIPlugin
 						try{
 							Class.forName( "com.aelitis.azureus.plugins.xmwebui.swt.XMWebUIPluginView").getConstructor(
 								new Class[]{ XMWebUIPlugin.class, UIInstance.class }).newInstance(
-									new Object[]{ XMWebUIPlugin.this, instance } );
+									XMWebUIPlugin.this, instance);
 														
 						}catch( Throwable e ){
 							e.printStackTrace();
@@ -550,7 +524,7 @@ XMWebUIPlugin
 
 					synchronized( json_server_method_lock ){
 						
-						Map<String,Object> new_methods = new HashMap<String, Object>( json_server_methods );
+						Map<String,Object> new_methods = new HashMap<>(json_server_methods);
 													
 						for ( String method: methods ){
 							
@@ -572,7 +546,7 @@ XMWebUIPlugin
 
 					synchronized( json_server_method_lock ){
 						
-						Map<String,Object> new_methods = new HashMap<String, Object>( json_server_methods );
+						Map<String,Object> new_methods = new HashMap<>(json_server_methods);
 													
 						for ( String method: methods ){
 							
@@ -619,7 +593,7 @@ XMWebUIPlugin
 	protected void changeLogToFile(boolean logToFile) {
 		if (log != null) {
 			if (logToFile) {
-				log.setDiagnostic(1024l * 1024l, true);
+				log.setDiagnostic(1024L * 1024L, true);
 			} else {
 				// no way of turning off :(
 			}
@@ -639,7 +613,7 @@ XMWebUIPlugin
 		{
 			String 	data_dir 	= pc.getCoreStringParameter( PluginConfig.CORE_PARAM_STRING_DEFAULT_SAVE_PATH );
 	
-			boolean	data_bad = false;
+			boolean	data_bad;
 			
 			if ( data_dir == null || data_dir.length() == 0 ){
 				
@@ -678,7 +652,7 @@ XMWebUIPlugin
 			
 			String 	torrent_dir 	= pc.getUnsafeStringParameter( "General_sDefaultTorrent_Directory" );
 
-			boolean torrent_bad = false;
+			boolean torrent_bad;
 			
 			if ( torrent_dir == null || torrent_dir.length() == 0 ){
 				
@@ -818,13 +792,13 @@ XMWebUIPlugin
 			
 				if ( !recently_removed.containsKey( id )){
 					
-					recently_removed.put( id, new RecentlyRemovedData( id ));
+					recently_removed.put( id, new RecentlyRemovedData(id));
 				}
 			}
 		}
 	}
 	
-	private boolean
+	boolean
 	handleRecentlyRemoved(
 		String	session_id,
 		Map		args,
@@ -832,7 +806,7 @@ XMWebUIPlugin
 	{
 		Object	ids = args.get( "ids" );
 		
-		if ( ids != null && ids instanceof String && ((String)ids).equals( "recently-active" )){
+		if ((ids instanceof String) && ids.equals("recently-active")){
 						
 			synchronized( recently_removed ){
 				
@@ -842,7 +816,7 @@ XMWebUIPlugin
 
 					Iterator<RecentlyRemovedData> it = recently_removed.values().iterator();
 					
-					List<Long>	removed = new ArrayList<Long>();
+					List<Long>	removed = new ArrayList<>();
 					
 					while( it.hasNext()){
 					
@@ -949,7 +923,7 @@ XMWebUIPlugin
 					lnr = new LineNumberReader( new InputStreamReader( request.getInputStream(), "UTF-8" ));
 				}
 					
-				StringBuffer	request_json_str = new StringBuffer(2048);
+				StringBuilder request_json_str = new StringBuilder(2048);
 				
 				while( true ){
 					
@@ -1160,7 +1134,7 @@ XMWebUIPlugin
 								
 							}catch( Throwable e ){
 								
-								throw( new IOException( "Failed to deserialise torrent file: " + getCausesMesssages(e)));
+								throw( new IOException( "Failed to deserialise torrent file: " + StaticUtils.getCausesMesssages(e)));
 							}
 							
 							try{
@@ -1174,7 +1148,7 @@ XMWebUIPlugin
 								
 							}catch( Throwable e ){
 								
-								throw( new IOException( "Failed to add torrent: " + getCausesMesssages(e)));
+								throw( new IOException( "Failed to add torrent: " + StaticUtils.getCausesMesssages(e)));
 	
 							}
 						}
@@ -1248,11 +1222,11 @@ XMWebUIPlugin
 				e.printStackTrace();
 			}
 			
-			throw( new IOException( "Processing failed: " + getCausesMesssages( e )));
+			throw( new IOException( "Processing failed: " + StaticUtils.getCausesMesssages( e )));
 		}
 	}
 	
-	private String
+	private static String
 	getCookie(
 		String		cookies,
 		String		cookie_id)
@@ -1262,11 +1236,11 @@ XMWebUIPlugin
 			return null;
 		}
 
-		List<String> cookie_list = fastSplit(cookies, ';');
+		List<String> cookie_list = StaticUtils.fastSplit(cookies, ';');
 		
 		for ( String cookie: cookie_list ){
 
-			List<String> bits = fastSplit(cookie, '=');
+			List<String> bits = StaticUtils.fastSplit(cookie, '=');
 			
 			if ( bits.size() == 2 ){
 				
@@ -1337,7 +1311,7 @@ XMWebUIPlugin
 		}
 	}
 
-	private static Object add_torrent_lock = new Object();
+	private final static Object add_torrent_lock = new Object();
 	
 	private ByteArrayHashMap<DownloadWillBeAddedListener>	add_torrent_listeners = new ByteArrayHashMap<>();
 	
@@ -1426,7 +1400,7 @@ XMWebUIPlugin
 			
 			log( "permission denied" );
 			
-			throw( new PermissionDeniedException());
+			throw(new PermissionDeniedException());
 		}
 	}
 	
@@ -1481,7 +1455,7 @@ XMWebUIPlugin
 		
 		}catch( Throwable e ){
 			log("processRequest", e);
-			response.put( "result", "error: " + getCausesMesssages( e ));
+			response.put( "result", "error: " + StaticUtils.getCausesMesssages( e ));
 		}
 		
 		Object	tag = request.get( "tag" );
@@ -1494,51 +1468,6 @@ XMWebUIPlugin
 		return( response );
 	}
 
-	public static String getCausesMesssages(Throwable e) {
-		try {
-			StringBuilder sb = new StringBuilder();
-			while (e != null) {
-				if (sb.length() > 0) {
-					sb.append(", ");
-				}
-				sb.append(e.getClass().getSimpleName());
-				sb.append(": ");
-				sb.append(e.getMessage());
-				e = e.getCause();
-			}
-
-			return sb.toString();
-
-		} catch (Throwable derp) {
-			return "derp " + derp.getClass().getSimpleName(); //NON-NLS
-		}
-	}
-
-	static Number getNumber(
-			Object val)
-	{
-		return getNumber(val, 0);
-	}
-
-	static Number getNumber(
-			Object val,
-			Number defaultNumber)
-	{
-		if (val instanceof Number) {
-			return (Number) val;
-		}
-		if (val instanceof String) {
-			NumberFormat format = NumberFormat.getInstance();
-			try {
-				Number number = format.parse((String) val);
-				return number;
-			} catch (ParseException e) {
-				return defaultNumber;
-			}
-		}
-		return defaultNumber;
-	}
-	
 	protected Map
 	processRequest(
 		TrackerWebPageRequest		request,
@@ -1557,213 +1486,255 @@ XMWebUIPlugin
 			
 				// to get 271 working with this backend change remote.js RPC _Root to be
 				// _Root                   : './transmission/rpc',
-	
-			if ( method.equals(METHOD_SESSION_SET)){
-	
-				try{
-					SessionMethods.method_Session_Set(this, plugin_interface, args);
-					
-				}finally{
-					
+
+			switch (method) {
+				case METHOD_SESSION_SET:
+
+					try {
+						SessionMethods.method_Session_Set(this, plugin_interface, args);
+
+					} finally {
+
 						// assume something important was changed and persist it now 
-					
-					COConfigurationManager.save();
-				}
-	
-			} else if ( method.equals(METHOD_SESSION_GET) ){
-	
-				SessionMethods.method_Session_Get(this, plugin_interface, request, args,
-						result);
-				
-			}else if ( method.equals(METHOD_SESSION_STATS)){
-	
-				SessionMethods.method_Session_Stats(args, result);
-				
-			}else if ( method.equals( "torrent-add" )){
-				String agent = MapUtils.getMapString(request.getHeaders(), "User-Agent", "");
-				boolean xmlEscape = agent.startsWith("Mozilla/");
 
-				method_Torrent_Add(args, result, xmlEscape);
-				
-				// this is handled within the torrent-add method: save_core_state = true;
-				
-			}else if ( method.equals( "torrent-start-all" )){
-	
-				checkUpdatePermissions();
-				
-				plugin_interface.getDownloadManager().startAllDownloads();
-			
-				save_core_state = true;
-				
-			}else if ( method.equals( "torrent-stop-all" )){
-	
-				checkUpdatePermissions();
-				
-				plugin_interface.getDownloadManager().stopAllDownloads();
-				
-				save_core_state = true;
-				
-			}else if ( method.equals( "torrent-start" )){
-	
-				method_Torrent_Start(args, result);
-	
-				save_core_state = true;
-				
-			}else if ( method.equals( "torrent-start-now" )){
-				// RPC v14
-	
-				method_Torrent_Start_Now(args, result);
-	
-				save_core_state = true;
-				
-			}else if ( method.equals( "torrent-stop" )){
-	
-				method_Torrent_Stop(args, result);
-				
-				save_core_state = true;
-				
-			}else if ( method.equals( "torrent-verify" )){
-	
-				method_Torrent_Verify(args, result);
-	
-			}else if ( method.equals(METHOD_TORRENT_REMOVE)){
-				// RPC v3
-	
-				method_Torrent_Remove(args, result);
-	
-				save_core_state = true;
-				
-			}else if ( method.equals(METHOD_TORRENT_SET)){
-				
-				method_Torrent_Set( session_id, args, result);
-				
-			}else if ( method.equals(METHOD_TORRENT_GET)){
-	
-				method_Torrent_Get(request, session_id, args, result);
-	
-			}else if ( method.equals(METHOD_TORRENT_REANNOUNCE)){
-				// RPC v5
-	
-				method_Torrent_Reannounce(args, result);
-				
-			}else if ( method.equals(METHOD_TORRENT_SET_LOCATION)){
-				// RPC v6
-				
-				method_Torrent_Set_Location(args, result);
-	
-			}else if ( method.equals( "blocklist-update" )){
-				// RPC v5
-				
-				method_Blocklist_Update(args, result);
-	
-			}else if ( method.equals( "session-close" )){
-				// RPC v12
-				//TODO: This method tells the transmission session to shut down.
-	
-			}else if ( method.equals(METHOD_Q_MOVE_TOP)){
-				// RPC v14
-				method_Queue_Move_Top(args, result);
-	
-			}else if ( method.equals( "queue-move-up" )){
-				// RPC v14
-				method_Queue_Move_Up(args, result);
-	
-			}else if ( method.equals( "queue-move-down" )){
-				// RPC v14
-				method_Queue_Move_Down(args, result);
-	
-			}else if ( method.equals(METHOD_Q_MOVE_BOTTOM)){
-				// RPC v14
-				method_Queue_Move_Bottom(args, result);
-	
-			}else if ( method.equals(METHOD_FREE_SPACE)){
-				// RPC v15
-				method_Free_Space(args, result);
-	
-			}else if ( method.equals( "torrent-rename-path" )){
-				// RPC v15
-				method_Torrent_Rename_Path(args, result);
-	
-			}else if ( method.equals( "tags-get-list" )){
-				// Vuze RPC v3
-				method_Tags_Get_List(args, result);
+						COConfigurationManager.save();
+					}
 
-			}else if ( method.equals(METHOD_TAGS_LOOKUP_START)){
+					break;
+				case METHOD_SESSION_GET:
 
-				method_Tags_Lookup_Start(args, result);
+					SessionMethods.method_Session_Get(this, plugin_interface, request, args,
+							result);
 
-			}else if ( method.equals(METHOD_TAGS_LOOKUP_GET_RESULTS)){
+					break;
+				case METHOD_SESSION_STATS:
 
-				method_Tags_Lookup_Get_Results(args, result);
+					SessionMethods.method_Session_Stats(args, result);
 
-			}else if ( method.equals(METHOD_SUBSCRIPTION_GET)){
-				
-				method_Subscription_Get(args, result);
-				
-			}else if ( method.equals( "subscription-add" )){
-				
-				method_Subscription_Add(args, result);
-				
-			}else if ( method.equals(METHOD_SUBSCRIPTION_SET)){
-				
-				method_Subscription_Set(args, result);
-				
-			}else if ( method.equals(METHOD_SUBSCRIPTION_REMOVE)){
-				
-				method_Subscription_Remove(args, result);
-				
-			}else if ( method.equals( "vuze-search-start" )){
-				
-				method_Vuze_Search_Start(args, result);
-				
-			}else if ( method.equals(METHOD_VUZE_SEARCH_GET_RESULTS)){
-				
-				method_Vuze_Search_Get_Results(args, result);
+					break;
+				case "torrent-add":
+					String agent = MapUtils.getMapString(request.getHeaders(), "User-Agent", "");
+					boolean xmlEscape = agent.startsWith("Mozilla/");
 
-			}else if ( method.equals( "vuze-config-set" )){
-				
-				method_Vuze_Config_Set(args, result);
+					method_Torrent_Add(args, result, xmlEscape);
 
-			}else if ( method.equals( "vuze-config-get" )){
-				
-				method_Vuze_Config_Get(args, result);
+					// this is handled within the torrent-add method: save_core_state = true;
 
-			}else if ( method.equals( "vuze-plugin-get-list" )){
-				
-				method_Vuze_Plugin_Get_List(args, result);
+					break;
+				case "torrent-start-all":
 
-			}else if ( method.equals( "vuze-lifecycle" )){
-	
-				processVuzeLifecycle( args, result );
-				
-			}else if ( method.equals( "vuze-pairing" )){
-						
-				processVuzePairing( args, result );
-				
-			}else if ( method.equals( "vuze-torrent-get" )){
-	
-				processVuzeTorrentGet( request, args, result );
-		
-			}else if ( method.equals( "vuze-file-add" )){
-				
-				processVuzeFileAdd( args, result );
-	
-			}else if ( method.equals( "bigly-console" )){
-				
-				processConsole( args, result );
-				
-			}else{
-			
-				Utilities.JSONServer server = (Utilities.JSONServer)json_server_methods.get( method );
-				
-				if ( server != null ){
-					
-					return( server.call( method, args ));
-				}
-				
-				if ( trace_param.getValue() ){
-					log( "unhandled method: " + method + " - " + args );
-				}
+					checkUpdatePermissions();
+
+					plugin_interface.getDownloadManager().startAllDownloads();
+
+					save_core_state = true;
+
+					break;
+				case "torrent-stop-all":
+
+					checkUpdatePermissions();
+
+					plugin_interface.getDownloadManager().stopAllDownloads();
+
+					save_core_state = true;
+
+					break;
+				case "torrent-start":
+
+					method_Torrent_Start(args, result);
+
+					save_core_state = true;
+
+					break;
+				case "torrent-start-now":
+					// RPC v14
+
+					method_Torrent_Start_Now(args, result);
+
+					save_core_state = true;
+
+					break;
+				case "torrent-stop":
+
+					method_Torrent_Stop(args, result);
+
+					save_core_state = true;
+
+					break;
+				case "torrent-verify":
+
+					method_Torrent_Verify(args, result);
+
+					break;
+				case METHOD_TORRENT_REMOVE:
+					// RPC v3
+
+					method_Torrent_Remove(args, result);
+
+					save_core_state = true;
+
+					break;
+				case METHOD_TORRENT_SET:
+
+					method_Torrent_Set(session_id, args, result);
+
+					break;
+				case METHOD_TORRENT_GET:
+
+					TorrentGetMethods.method_Torrent_Get(this, request, session_id, args, result);
+
+					break;
+				case METHOD_TORRENT_REANNOUNCE:
+					// RPC v5
+
+					method_Torrent_Reannounce(args, result);
+
+					break;
+				case METHOD_TORRENT_SET_LOCATION:
+					// RPC v6
+
+					method_Torrent_Set_Location(args, result);
+
+					break;
+				case "blocklist-update":
+					// RPC v5
+
+					method_Blocklist_Update(args, result);
+
+					break;
+				case "session-close":
+					// RPC v12
+					//TODO: This method tells the transmission session to shut down.
+
+					break;
+				case METHOD_Q_MOVE_TOP:
+					// RPC v14
+					method_Queue_Move_Top(args, result);
+
+					break;
+				case "queue-move-up":
+					// RPC v14
+					method_Queue_Move_Up(args, result);
+
+					break;
+				case "queue-move-down":
+					// RPC v14
+					method_Queue_Move_Down(args, result);
+
+					break;
+				case METHOD_Q_MOVE_BOTTOM:
+					// RPC v14
+					method_Queue_Move_Bottom(args, result);
+
+					break;
+				case METHOD_FREE_SPACE:
+					// RPC v15
+					method_Free_Space(args, result);
+
+					break;
+				case "torrent-rename-path":
+					// RPC v15
+					method_Torrent_Rename_Path(args, result);
+
+					break;
+				case "tags-get-list":
+					// Vuze RPC v3
+					method_Tags_Get_List(args, result);
+
+					break;
+				case METHOD_TAGS_LOOKUP_START:
+
+					method_Tags_Lookup_Start(args, result);
+
+					break;
+				case METHOD_TAGS_LOOKUP_GET_RESULTS:
+
+					method_Tags_Lookup_Get_Results(args, result);
+
+					break;
+				case METHOD_SUBSCRIPTION_GET:
+
+					method_Subscription_Get(args, result);
+
+					break;
+				case "subscription-add":
+
+					method_Subscription_Add(args, result);
+
+					break;
+				case METHOD_SUBSCRIPTION_SET:
+
+					method_Subscription_Set(args, result);
+
+					break;
+				case METHOD_SUBSCRIPTION_REMOVE:
+
+					method_Subscription_Remove(args, result);
+
+					break;
+				case "vuze-search-start":
+
+					method_Vuze_Search_Start(args, result);
+
+					break;
+				case METHOD_VUZE_SEARCH_GET_RESULTS:
+
+					method_Vuze_Search_Get_Results(args, result);
+
+					break;
+				case "vuze-config-set":
+
+					method_Vuze_Config_Set(args, result);
+
+					break;
+				case "vuze-config-get":
+
+					method_Vuze_Config_Get(args, result);
+
+					break;
+				case "vuze-plugin-get-list":
+
+					method_Vuze_Plugin_Get_List(args, result);
+
+					break;
+				case "vuze-lifecycle":
+
+					processVuzeLifecycle(args, result);
+
+					break;
+				case "vuze-pairing":
+
+					processVuzePairing(args, result);
+
+					break;
+				case "vuze-torrent-get":
+
+					processVuzeTorrentGet(request, args, result);
+
+					break;
+				case "vuze-file-add":
+
+					processVuzeFileAdd(args, result);
+
+					break;
+				case "bigly-console":
+
+					processConsole(args, result);
+
+					break;
+				default:
+
+					JSONServer server = (JSONServer) json_server_methods.get(method);
+
+					if (server != null) {
+
+						return (server.call(method, args));
+					}
+
+					if (trace_param.getValue()) {
+						log("unhandled method: " + method + " - " + args);
+					}
+					break;
 			}
 	
 			return( result );
@@ -1779,7 +1750,7 @@ XMWebUIPlugin
 		}
 	}
 	
-	private void method_Vuze_Plugin_Get_List(Map args, Map result) {
+	private static void method_Vuze_Plugin_Get_List(Map args, Map result) {
 		String sep = System.getProperty("file.separator");
 
 		File fUserPluginDir = FileUtil.getUserFile("plugins");
@@ -1804,10 +1775,8 @@ XMWebUIPlugin
 			sAppPluginDir += sep;
 		}
 
-		List pluginIFs = Arrays.asList(
-				CoreFactory.getSingleton().getPluginManager().getPlugins());
-		for (Iterator iter = pluginIFs.iterator(); iter.hasNext();) {
-			PluginInterface pi = (PluginInterface) iter.next();
+		PluginInterface[] pluginIFs = CoreFactory.getSingleton().getPluginManager().getPlugins();
+		for (PluginInterface pi : pluginIFs) {
 
 			Map mapPlugin = new HashMap();
 			result.put(pi.getPluginID(), mapPlugin);
@@ -1845,7 +1814,7 @@ XMWebUIPlugin
 		}
 	}
 
-	private void method_Vuze_Config_Get(Map args, Map result) {
+	private static void method_Vuze_Config_Get(Map args, Map result) {
 		List listKeys = MapUtils.getMapList(args, "keys", Collections.EMPTY_LIST);
 		for (Object key : listKeys) {
 			String keyString = key.toString();
@@ -1875,7 +1844,7 @@ XMWebUIPlugin
 
 	}
 
-	private void method_Vuze_Config_Set(Map args, Map result) {
+	private static void method_Vuze_Config_Set(Map args, Map result) {
 		Map mapDirect = MapUtils.getMapMap(args, "direct", Collections.EMPTY_MAP);
 		for (Object key : mapDirect.keySet()) {
 			String keyString = key.toString();
@@ -1928,7 +1897,7 @@ XMWebUIPlugin
 		COConfigurationManager.save();
 	}
 	
-	private boolean
+	private static boolean
 	ignoreConfigKey(
 		String		key )
 	{
@@ -2075,7 +2044,7 @@ XMWebUIPlugin
 
 		sps.add(new SearchParameter("s", expression));
 
-		SearchParameter[] parameters = sps.toArray(new SearchParameter[sps.size()]);
+		SearchParameter[] parameters = sps.toArray(new SearchParameter[0]);
 
 		Map<String, String> context = new HashMap();
 		context.put(Engine.SC_SOURCE, "xmwebui");
@@ -2123,7 +2092,7 @@ XMWebUIPlugin
 		}
 	}
 
-	private void method_Subscription_Add(Map args, Map result) throws MalformedURLException, SubscriptionException {
+	private static void method_Subscription_Add(Map args, Map result) throws MalformedURLException, SubscriptionException {
 		String url = MapUtils.getMapString(args, "rss-url", null);
 		String name = MapUtils.getMapString(args, FIELD_SUBSCRIPTION_NAME,
 				"Subscription " + DateFormat.getInstance().toString());
@@ -2154,7 +2123,7 @@ XMWebUIPlugin
 	 *   etc
 	 * }
 	 */
-	private void method_Subscription_Set(Map args, Map result)
+	private static void method_Subscription_Set(Map args, Map result)
 			throws SubscriptionException, IOException {
 		Object oIDs = args.get("ids");
 
@@ -2204,8 +2173,6 @@ XMWebUIPlugin
 				} else if (subscriptionFieldName.equals(FIELD_SUBSCRIPTION_RESULTS)
 						&& (oSubscriptionFieldValue instanceof Map)) {
 					
-					Map map = new HashMap();
-
 					Map mapResults = (Map) oSubscriptionFieldValue;
 					SubscriptionResult[] results = subs.getResults(false);
 					for (Object oResultKey : mapResults.keySet()) {
@@ -2235,7 +2202,7 @@ XMWebUIPlugin
 		}
 	}
 
-	private void method_Subscription_Remove(Map args, Map result) throws IOException {
+	private static void method_Subscription_Remove(Map args, Map result) throws IOException {
 		Object oID = args.get("ids");
 
 		if (oID == null) {
@@ -2245,8 +2212,8 @@ XMWebUIPlugin
 		String[] ids = new String[0];
 		if (oID instanceof String) {
 			ids = new String[] { (String) oID };
-		} else if (oID instanceof List) {
-			ids = (String[]) ((List) oID).toArray(new String[0]);
+		} else if (oID instanceof Collection) {
+			ids = (String[]) ((Collection) oID).toArray(new String[0]);
 		} else if (oID instanceof Object[]) {
 			Object[] oIDS = (Object[]) oID; 
 			ids = new String[oIDS.length];
@@ -2304,7 +2271,7 @@ XMWebUIPlugin
 
 		SubscriptionManager subMan = SubscriptionManagerFactory.getSingleton();
 
-		List fields = (List) args.get("fields");
+		List fields = (List) args.get(ARG_FIELDS);
 		boolean all = fields == null || fields.size() == 0;
 		if (!all) {
 			// sort so we can't use Collections.binarySearch
@@ -2336,8 +2303,8 @@ XMWebUIPlugin
 				ids = new String[] {
 					(String) oID
 				};
-			} else if (oID instanceof List) {
-				ids = (String[]) ((List) oID).toArray(new String[0]);
+			} else if (oID instanceof Collection) {
+				ids = (String[]) ((Collection) oID).toArray(new String[0]);
 			} else if (oID instanceof Object[]) {
 				Object[] oIDS = (Object[]) oID;
 				ids = new String[oIDS.length];
@@ -2373,7 +2340,7 @@ XMWebUIPlugin
 
 
 
-	private Map<String, Object> buildSubscriptionMap(Subscription sub, Map args,
+	private static Map<String, Object> buildSubscriptionMap(Subscription sub, Map args,
 			List fields, boolean all) {
 		Map<String, Object> map = new HashMap<>();
 		
@@ -2586,10 +2553,8 @@ XMWebUIPlugin
 
 				List fieldsResults = args == null ? null : (List) args.get("results-fields");
 				boolean allResults = fieldsResults == null || fieldsResults.size() == 0;
-				
-				for (int i = 0; i < results.length; i++) {
-					SubscriptionResult r = results[i];
 
+				for (SubscriptionResult r : results) {
 					listResults.add(buildSubscriptionResultMap(r, fieldsResults, allResults));
 				}
 
@@ -2599,7 +2564,7 @@ XMWebUIPlugin
 		return map;
 	}
 
-	private Map buildSubscriptionResultMap(SubscriptionResult r,
+	private static Map buildSubscriptionResultMap(SubscriptionResult r,
 			List fieldsResults, boolean allResults) {
 
 		Map jsonMap = r.toJSONMap();
@@ -2610,7 +2575,7 @@ XMWebUIPlugin
 		return jsonMap;
 	}
 
-	private void addNotNullToMap(Map<String, Object> map,
+	private static void addNotNullToMap(Map<String, Object> map,
 			String id, Object o) {
 		if (o == null) {
 			return;
@@ -2618,8 +2583,8 @@ XMWebUIPlugin
 		map.put(id, o);
 	}
 
-	private void method_Tags_Get_List(Map args, Map result) {
-		List fields = (List) args.get("fields");
+	private static void method_Tags_Get_List(Map args, Map result) {
+		List fields = (List) args.get(ARG_FIELDS);
 		boolean all = fields == null || fields.size() == 0;
 		if (!all) {
 			// sort so we can't use Collections.binarySearch
@@ -2707,7 +2672,7 @@ XMWebUIPlugin
 			}
 		}
 
-		String hc = Long.toHexString(longHashSimpleList(listTags));
+		String hc = Long.toHexString(StaticUtils.longHashSimpleList(listTags));
 		result.put("tags-hc", hc);
 		
 		String oldHC = MapUtils.getMapString(args, "tags-hc", null);
@@ -2716,7 +2681,7 @@ XMWebUIPlugin
 		}
 	}
 
-	private void method_Free_Space(Map args, Map result) {
+	private static void method_Free_Space(Map args, Map result) {
 		// RPC v15
 /*
    This method tests how much free space is available in a
@@ -2786,12 +2751,7 @@ XMWebUIPlugin
 		GlobalManager gm = core.getGlobalManager();
 
 		List<DownloadManager>	dms = getDownloadManagerListFromIDs( gm, ids );
-    Collections.sort(dms, new Comparator<DownloadManager>() {
-			@Override
-			public int compare(DownloadManager a, DownloadManager b) {
-        return b.getPosition() - a.getPosition();
-			}
-    });
+    Collections.sort(dms, (a, b) -> b.getPosition() - a.getPosition());
     for (DownloadManager dm : dms) {
 			gm.moveDown(dm);
 		}
@@ -2810,12 +2770,7 @@ XMWebUIPlugin
 		GlobalManager gm = core.getGlobalManager();
 
 		List<DownloadManager>	dms = getDownloadManagerListFromIDs( gm, ids );
-    Collections.sort(dms, new Comparator<DownloadManager>() {
-			@Override
-			public int compare(DownloadManager a, DownloadManager b) {
-        return a.getPosition() - b.getPosition();
-			}
-    });
+    Collections.sort(dms, (a, b) -> a.getPosition() - b.getPosition());
     for (DownloadManager dm : dms) {
 			gm.moveUp(dm);
 		}
@@ -2964,11 +2919,11 @@ XMWebUIPlugin
 		// RPC v5
 		// Not used: Number bandwidthPriority = getNumber("bandwidthPriority", null);
 
-		Number speed_limit_down = getNumber(
-				args.get("downloadLimit"),
-				getNumber(args.get(TR_PREFS_KEY_DSPEED_KBps),
-						getNumber(args.get("speedLimitDownload"))));
-		Boolean downloadLimited = getBoolean("downloadLimited", null);
+		Number speed_limit_down = StaticUtils.getNumber(
+				args.get(FIELD_TORRENT_DOWNLOAD_LIMIT),
+				StaticUtils.getNumber(args.get(TR_PREFS_KEY_DSPEED_KBps),
+						StaticUtils.getNumber(args.get("speedLimitDownload"))));
+		Boolean downloadLimited = getBoolean(FIELD_TORRENT_DOWNLOAD_LIMITED, null);
 
 		List files_wanted 		= (List)args.get( "files-wanted" );
 		List files_unwanted 	= (List)args.get( "files-unwanted" );
@@ -2982,7 +2937,7 @@ XMWebUIPlugin
 		String location = (String) args.get("location");
 		
 		// RPC v16
-		List labels = (List) args.get("labels"); 
+		List labels = (List) args.get(FIELD_TORRENT_LABELS); 
 
 		// Not Implemented: By default, Vuze automatically adjusts mac connections per torrent based on bandwidth and seeding state
 		// "peer-limit"          | number     maximum number of peers
@@ -2995,7 +2950,7 @@ XMWebUIPlugin
 		
 		// RPC v14
 		// "queuePosition"       | number     position of this torrent in its queue [0...n)
-		Number queuePosition = getNumber(FIELD_TORRENT_POSITION, null);
+		Number queuePosition = StaticUtils.getNumber(FIELD_TORRENT_POSITION, null);
 
 		// RPC v10
 		// "seedIdleLimit"       | number     torrent-level number of minutes of seeding inactivity
@@ -3021,10 +2976,10 @@ XMWebUIPlugin
 		// "trackerReplace"      | array      pairs of <trackerId/new announce URLs>
 
 		// "uploadLimit"         | number     maximum upload speed (KBps)
-		Number speed_limit_up = getNumber(
+		Number speed_limit_up = StaticUtils.getNumber(
 				args.get("uploadLimit"),
-				getNumber(args.get(TR_PREFS_KEY_USPEED_KBps),
-						getNumber(args.get("speedLimitUpload"))));
+				StaticUtils.getNumber(args.get(TR_PREFS_KEY_USPEED_KBps),
+						StaticUtils.getNumber(args.get("speedLimitUpload"))));
 
 		// "uploadLimited"       | boolean    true if "uploadLimit" is honored
 		Boolean uploadLimited = getBoolean("uploadLimited", null);
@@ -3037,8 +2992,8 @@ XMWebUIPlugin
 		Long	l_uploaded_ever		= (Long)args.get(FIELD_TORRENT_UPLOADED_EVER);
 		Long	l_downloaded_ever 	= (Long)args.get(FIELD_TORRENT_DOWNLOADED_EVER);
 		
-		long	uploaded_ever 	= l_uploaded_ever==null?-1:l_uploaded_ever.longValue();
-		long	downloaded_ever = l_downloaded_ever==null?-1:l_downloaded_ever.longValue();
+		long	uploaded_ever 	= l_uploaded_ever==null?-1: l_uploaded_ever;
+		long	downloaded_ever = l_downloaded_ever==null?-1: l_downloaded_ever;
 
 		String name = (String) args.get("name");
 
@@ -3184,49 +3139,49 @@ XMWebUIPlugin
 				DiskManagerFileInfo[] files = download.getDiskManagerFileInfo();
 					
 				if ( files_unwanted != null ){
-					
-					for ( int i=0;i<files_unwanted.size();i++){
-						
-						int	index = ((Long)files_unwanted.get( i )).intValue();
-						
+
+					for (Object o : files_unwanted) {
+
+						int index = ((Long) o).intValue();
+
 						if ( index >= 0 && index <= files.length ){
-							
+
 							files[index].setSkipped( true );
 						}
 					}
 				}
 				
 				if ( files_wanted != null ){
-					
-					for ( int i=0;i<files_wanted.size();i++){
-						
-						int	index = ((Long)files_wanted.get( i )).intValue();
-						
+
+					for (Object o : files_wanted) {
+
+						int index = ((Long) o).intValue();
+
 						if ( index >= 0 && index <= files.length ){
-							
+
 							files[index].setSkipped( false );
 						}
 					}
 				}
 				
 				if ( priority_high != null ){
-					
-					for ( int i=0;i<priority_high.size();i++){
-						
-						int	index = ((Long)priority_high.get( i )).intValue();
-						
+
+					for (Object o : priority_high) {
+
+						int index = ((Long) o).intValue();
+
 						if ( index >= 0 && index <= files.length ){
-							
+
 							files[index].setNumericPriority( DiskManagerFileInfo.PRIORITY_HIGH );
 						}
 					}
 				}
 				
 				if ( priority_normal != null ){
-					
-					for ( int i=0;i<priority_normal.size();i++){
-						
-						int	index = ((Long)priority_normal.get( i )).intValue();
+
+					for (Object o : priority_normal) {
+
+						int index = ((Long) o).intValue();
 						
 						if ( index >= 0 && index <= files.length ){
 							
@@ -3236,10 +3191,10 @@ XMWebUIPlugin
 				}
 				
 				if ( priority_low != null ){
-					
-					for ( int i=0;i<priority_low.size();i++){
-						
-						int	index = ((Long)priority_low.get( i )).intValue();
+
+					for (Object o : priority_low) {
+
+						int index = ((Long) o).intValue();
 						
 						if ( index >= 0 && index <= files.length ){
 							
@@ -3264,9 +3219,9 @@ XMWebUIPlugin
 					boolean	paused_it = false;
 					
 					try{
-						for ( int i=0;i<file_infos.size();i++){
-							
-							Map file_info = (Map)file_infos.get( i );
+						for (Object fileInfo : file_infos) {
+
+							Map file_info = (Map) fileInfo;
 							
 							int index = ((Number)file_info.get(FIELD_FILES_INDEX)).intValue();
 							
@@ -3326,7 +3281,7 @@ XMWebUIPlugin
 		}
 	}
 
-	private void addTagToDownload(Download download, Object tagToAdd, TagType tt) {
+	private static void addTagToDownload(Download download, Object tagToAdd, TagType tt) {
 		Tag tag = null;
 		if (tagToAdd instanceof String) {
 			String tagNameToAdd = ((String) tagToAdd).trim();
@@ -3612,7 +3567,7 @@ XMWebUIPlugin
 			try{
 				String metainfoString = (String) args.get("metainfo");
 	
-				byte[]	metainfoBytes = null;
+				byte[]	metainfoBytes;
 			
 				if ( metainfoString != null ){
 			
@@ -3658,7 +3613,7 @@ XMWebUIPlugin
   					
   					if ( e != null ){
   						
-  						added_templates += (added_templates==""?"":", ") + e.getName();
+  						added_templates += (added_templates.isEmpty()?"":", ") + e.getName();
   					}
   				}
   			}
@@ -3679,173 +3634,14 @@ XMWebUIPlugin
 					
 				}else{
 				
-					throw( new TextualException( "Vuze file addition failed: " + getCausesMesssages( last_error )));
+					throw( new TextualException( "Vuze file addition failed: " + StaticUtils.getCausesMesssages( last_error )));
 				}
 			}
 		}
 	}
 	
-	Map<String,ConsoleContext>		console_contexts = new HashMap<>();
+	private final Map<String,ConsoleContext>		console_contexts = new HashMap<>();
 
-	private class
-	ConsoleContext
-	{
-		private final String		uid;
-		
-		private final ConsoleInput			console;
-		private final InputStreamReader 	console_in_stream;
-		private final PipedOutputStream 	console_out_stream;
-		private final LinkedList<String>	console_pending = new LinkedList<>();
-		private final AESemaphore			console_sem = new AESemaphore( "XMWebUIPlugin:console-ui" );
-		
-		private boolean				console_closed;
-		
-		private 
-		ConsoleContext(
-			String		_uid )
-		
-			throws IOException
-		{
-			uid = _uid;
-			
-			PipedInputStream pis1 = new PipedInputStream( 32*1024 );
-			
-			console_out_stream = new PipedOutputStream( pis1 );
-			
-			PipedInputStream pis2 = new PipedInputStream( 32*1024 );
-			
-			PipedOutputStream console_in = new PipedOutputStream( pis2 );
-			
-			PrintStream out = new PrintStream( console_in, true );
-			
-			AEThread2.createAndStartDaemon(
-				"XMWebUIPlugin:console-ui",
-				()->{
-					try{
-						LineNumberReader lnr = new LineNumberReader( new InputStreamReader( pis2, Constants.UTF_8  ));
-						
-						while( true ){
-						
-							String line = lnr.readLine();
-							
-							if ( line == null ){
-									
-								break;
-							}
-							
-							synchronized( ConsoleContext.this ){
-
-								console_pending.add( line.trim());
-							}
-							
-							console_sem.release();
-							
-						}
-					}catch( Throwable e ){
-						
-						Debug.out( e );
-						
-					}finally{
-						
-						destroy();
-					}
-				});
-			
-			console_in_stream = new InputStreamReader( pis1, Constants.UTF_8 );
-			
-			console = new ConsoleInput( "", CoreFactory.getSingleton(), console_in_stream, out, Boolean.FALSE);
-		}
-		
-		private List<String>
-		process(
-			Map 	args )
-		{
-			List<String>	lines = new ArrayList<>();
-
-			try{
-				console_out_stream.write( (args.get( "cmd" ) + "\n" ).getBytes( Constants.UTF_8 ));
-				
-				String marker = Base32.encode(RandomUtils.nextSecureHash());
-				
-				console_out_stream.write( ("echo " + marker + "\n" ).getBytes( Constants.UTF_8 ));
-						
-				console_out_stream.flush();
-				
-				while( true ){
-					
-					if ( !console_sem.reserve(5000)){
-						
-						lines.add( "..." );
-						
-						break;
-					}
-					
-					synchronized( ConsoleContext.this ){
-						
-						if ( console_closed ){
-						
-							break;
-						}
-					
-						String line = console_pending.removeFirst();
-						
-						if ( line.contains( marker )){
-							
-							break;
-							
-						}else{
-							
-							lines.add( line );
-						}
-					}
-				}
-								
-			}catch( Throwable e ){
-				
-				lines.add( "Processing failed: " + Debug.getNestedExceptionMessage( e ));
-				
-				destroy();
-			}
-			
-			return( lines );
-		}
-		
-		private void
-		destroy()
-		{
-			try{
-				synchronized( ConsoleContext.this ){
-					
-					console_closed = true;
-				}
-				
-				try{
-					console_in_stream.close();
-					
-				}catch( Throwable e ){
-					
-				}
-				
-				try{
-					console_out_stream.close();
-					
-				}catch( Throwable e ){
-					
-				}
-				
-				console_sem.release();
-		
-			}finally{
-				
-				synchronized( console_contexts ){
-
-					console_contexts.remove( uid );
-				}
-			}
-		}
-		
-	}
-	
 	private void
 	processConsole(
 		Map 	args, 
@@ -3870,7 +3666,7 @@ XMWebUIPlugin
 		
 			if ( console == null ){
 				
-				console = new ConsoleContext( uid );
+				console = new ConsoleContext( console_contexts, uid );
 				
 				console_contexts.put( uid, console );
 			}
@@ -3969,7 +3765,7 @@ XMWebUIPlugin
 		  					
 		  					if ( e != null ){
 		  						
-		  						added_templates += (added_templates==""?"":", ") + e.getName();
+		  						added_templates += (added_templates.isEmpty()?"":", ") + e.getName();
 		  					}
 		  				}
 		  			}
@@ -4018,14 +3814,14 @@ XMWebUIPlugin
 						// some wanted -- so, set all toDelete and reset ones in list
 						Arrays.fill(toDelete, true);
 						for (Object oWanted : files_wanted) {
-							int idx = getNumber(oWanted, -1).intValue();
+							int idx = StaticUtils.getNumber(oWanted, -1).intValue();
 							if (idx >= 0 && idx < numFiles) {
 								toDelete[idx] = false;
 							}
 						}
 					}
 					for (Object oUnwanted : files_unwanted) {
-						int idx = getNumber(oUnwanted, -1).intValue();
+						int idx = StaticUtils.getNumber(oUnwanted, -1).intValue();
 						if (idx >= 0 && idx < numFiles) {
 							toDelete[idx] = true;
 						}
@@ -4039,7 +3835,7 @@ XMWebUIPlugin
 	
 					List priority_high = getList(args.get("priority-high"));
 					for (Object oHighPriority : priority_high) {
-						int idx = getNumber(oHighPriority, -1).intValue();
+						int idx = StaticUtils.getNumber(oHighPriority, -1).intValue();
 						if (idx >= 0 && idx < numFiles) {
 							download.getDiskManagerFileInfo(idx).setNumericPriority(
 									DiskManagerFileInfo.PRIORITY_HIGH);
@@ -4047,7 +3843,7 @@ XMWebUIPlugin
 					}
 					List priority_low = getList(args.get("priority-low"));
 					for (Object oLowPriority : priority_low) {
-						int idx = getNumber(oLowPriority, -1).intValue();
+						int idx = StaticUtils.getNumber(oLowPriority, -1).intValue();
 						if (idx >= 0 && idx < numFiles) {
 							download.getDiskManagerFileInfo(idx).setNumericPriority(
 									DiskManagerFileInfo.PRIORITY_LOW);
@@ -4117,7 +3913,7 @@ XMWebUIPlugin
 				//System.err.println("decode of " + new String(Base64.encode(metainfoBytes), "UTF8"));
 
 				throw (new IOException("torrent download failed: "
-						+ getCausesMesssages(e)));
+						+ StaticUtils.getCausesMesssages(e)));
 			}
 		} else if (url == null) {
 
@@ -4196,7 +3992,7 @@ XMWebUIPlugin
 											return;
 										}
 										
-										MagnetDownload magnet_download = new MagnetDownload( f_torrent_url, f_name );
+										MagnetDownload magnet_download = new MagnetDownload(XMWebUIPlugin.this, f_torrent_url, f_name );
 										
 										byte[]	hash = magnet_download.getTorrentHash();
 										
@@ -4335,7 +4131,7 @@ XMWebUIPlugin
 
 				e.printStackTrace();
 
-				throw( new IOException( getCausesMesssages( e )));
+				throw( new IOException( StaticUtils.getCausesMesssages( e )));
 			}
 			}
 		}
@@ -4347,15 +4143,15 @@ XMWebUIPlugin
 		
 		Map<String, Object> torrent_details = new HashMap<>();
 
-		torrent_details.put("id", new Long(getID(download, true)));
-		torrent_details.put("name", xmlEscape ? escapeXML(download.getName()) : download.getName());
+		torrent_details.put("id", getID(download, true));
+		torrent_details.put("name", xmlEscape ? StaticUtils.escapeXML(download.getName()) : download.getName());
 		torrent_details.put(FIELD_TORRENT_HASH_STRING,
 				ByteFormatter.encodeString(download.getTorrentHash()));
 
 		result.put(duplicate ? "torrent-duplicate" : "torrent-added", torrent_details);
 	}
 
-	private byte[] decodeBase64(String s) {
+	private static byte[] decodeBase64(String s) {
 		String newLineCheck = s.substring(0, 90);
 		boolean hasNewLine = newLineCheck.indexOf('\r') >= 0
 				|| newLineCheck.indexOf('\n') >= 0;
@@ -4365,7 +4161,7 @@ XMWebUIPlugin
 		return Base64.decode(s);
 	}
 
-	private byte[] getHashFromMagnetURI(String magnetURI) {
+	private static byte[] getHashFromMagnetURI(String magnetURI) {
 		Pattern patXT = Pattern.compile("xt=urn:(?:btih|sha1):([^&]+)");
 		Matcher matcher = patXT.matcher(magnetURI);
 		if (matcher.find()) {
@@ -4374,2325 +4170,6 @@ XMWebUIPlugin
 		return null;
 	}
 
-	private Map
-	method_Torrent_Get(
-		TrackerWebPageRequest request,
-		String		session_id,
-		Map 		args,
-		Map 		result)
-	{
-		
-		// When "file_indexes" key is present, returns:
-		// NOTE: Array position does not equal file index!  Use "index" key!
-		// {
-		// 	torrents : [
-		//               {
-		//                 <key> : <value>, 
-		//                 files : 
-		//                         [ 
-		//                           { 
-		//                             "index": <file-index>, 
-		//                             <other-fields>: <other-values>
-		//                           },
-		//                          <more file maps>
-		//                         ]
-		//                },
-		//               <more keys> : <move values>
-		//             ]
-		// }
-
-		List<String>	fields = (List<String>)args.get( "fields" );
-		
-		if ( fields == null ){
-			
-			fields = new ArrayList();
-		}
-		
-		Object	ids = args.get( "ids" );
-		
-		boolean is_recently_active = handleRecentlyRemoved( session_id, args, result );
-		
-		List<DownloadStub>	downloads = getDownloads( ids, true );
-		
-		List<String> file_fields = (List<String>) args.get(ARG_TORRENT_GET_FILE_FIELDS);
-		if (file_fields != null) {
-			Collections.sort(file_fields);
-		}
-				
-		Map<Long,Map<String, Object>>	torrent_info = new LinkedHashMap<>();
-		
-		String agent = MapUtils.getMapString(request.getHeaders(), "User-Agent", "");
-		boolean xmlEscape = agent.startsWith("Mozilla/");
-
-		for ( DownloadStub download_stub: downloads ){
-			if (download_stub.isStub()) {
-				method_Torrent_Get_Stub(request, args, fields, torrent_info,
-						download_stub, file_fields, xmlEscape);
-			} else {
-				method_Torrent_Get_NonStub(request, args, fields, torrent_info,
-						(Download) download_stub, file_fields, xmlEscape);
-			}
-		} // for downloads
-		
-		if ( is_recently_active ){
-			
-				// just return the latest diff for this session
-				// we could possibly, in theory, update the cache for all calls to this method, not just the 'recently active' calls
-				// but I don't trust the client enough atm to behave correctly
-			
-			synchronized( session_torrent_info_cache ){
-				
-				if ( session_torrent_info_cache.size() > 8 ){
-					
-					session_torrent_info_cache.clear();
-				}
-				
-				Map<Long,String> torrent_info_cache = session_torrent_info_cache.get( session_id );
-				
-				if ( torrent_info_cache == null ){
-					
-					torrent_info_cache = new HashMap<>();
-					
-					session_torrent_info_cache.put( session_id, torrent_info_cache );
-				}
-				
-				List<Long>	same = new ArrayList<>();
-				
-				for ( Map.Entry<Long,Map<String, Object>> entry: torrent_info.entrySet()){
-					
-					long	id 		= entry.getKey();
-					Map		torrent = entry.getValue();
-					
-					String current = JSONUtils.encodeToJSON( torrent );
-					
-					String prev = torrent_info_cache.get( id );
-					
-					if ( prev != null && prev.equals( current )){
-						
-						same.add( id );
-						
-					}else{
-						
-						torrent_info_cache.put( id, current );
-					}
-				}
-				
-				if ( same.size() > 0 ){
-					
-						// System.out.println( "same info: " + same.size() + " of " + torrent_info.size());
-					
-					for ( long id: same ){
-						
-						torrent_info.remove( id );
-					}
-				}
-			}
-		}
-
-		String format = MapUtils.getMapString(args, "format", "objects");
-
-		if (format.equalsIgnoreCase("table")) {
-			List<Collection<Object>> torrents = new ArrayList<>();
-
-			result.put( "torrents", torrents );
-
-			boolean first = true;
-			
-			for (Map mapTorrent : torrent_info.values()) {
-				Collection values = mapTorrent.values();
-				if (first) {
-					torrents.add(new ArrayList<>(mapTorrent.keySet()));
-					first = false;
-				}
-				torrents.add(values);
-			}
-		} else {
-			List<Map>	torrents = new ArrayList<>();
-			
-			result.put( "torrents", torrents );
-	
-			torrents.addAll( torrent_info.values());
-		}
-				
-		return result;
-	}
-
-	private void method_Torrent_Get_NonStub(
-			TrackerWebPageRequest request,
-			Map args,
-			List<String> fields,
-			Map<Long, Map<String, Object>> torrent_info,
-			Download download,
-			List<String> file_fields,
-			boolean xmlEscape)
-	{
-
-		Torrent t = download.getTorrent();
-
-		if (t == null) {
-			// Can't do this.. download is a nullstate, which doesn't store
-			// Attributes, and getID relies on that
-			//t = new TorrentBlank(download);
-			return;
-		}
-
-		long download_id = getID(download, true);
-
-		DownloadManager core_download = PluginCoreUtils.unwrap(download);
-
-		PEPeerManager pm = core_download.getPeerManager();
-
-		DownloadStats stats = download.getStats();
-
-		Map torrent = new HashMap(fields.size() + 8);
-
-		torrent_info.put(download_id, torrent);
-
-		int peers_from_us = 0;
-		int peers_to_us = 0;
-
-		if (pm != null) {
-
-			List<PEPeer> peers = pm.getPeers();
-
-			for (PEPeer peer : peers) {
-
-				PEPeerStats pstats = peer.getStats();
-
-				if (pstats.getDataReceiveRate() > 0) {
-
-					peers_to_us++;
-				}
-
-				if (pstats.getDataSendRate() > 0) {
-
-					peers_from_us++;
-				}
-			}
-		}
-
-		for (String field : fields) {
-
-			Object value = null;
-
-			if (field.equals(FIELD_TORRENT_DATE_ACTIVITY)) {
-				// RPC v0
-				// activityDate                | number                      | tr_stat
-				value = torrentGet_activityDate(core_download, false);
-
-			} else if (field.equals("activityDateRelative")) {
-				// RPC v0
-				// activityDate                | number                      | tr_stat
-				value = torrentGet_activityDate(core_download, true);
-
-			} else if (field.equals(FIELD_TORRENT_DATE_ADDED)) {
-				// RPC v0
-				// addedDate                   | number                      | tr_stat
-				/** When the torrent was first added. */
-				value = core_download.getDownloadState().getLongParameter(
-						DownloadManagerState.PARAM_DOWNLOAD_ADDED_TIME) / 1000;
-
-			} else if (field.equals("announceURL")) {
-				// Removed in RPC v7
-
-				value = t.getAnnounceURL().toExternalForm();
-
-			} else if (field.equals("bandwidthPriority")) {
-				// RPC v5: Not Supported
-				// bandwidthPriority           | number                      | tr_priority_t
-				/** torrent's bandwidth priority. */
-				value = TR_PRI_NORMAL;
-
-			} else if (field.equals(FIELD_TORRENT_COMMENT)) {
-				// RPC v0
-				// comment                     | string                      | tr_info
-
-				value = t.getComment();
-
-			} else if (field.equals("corruptEver")) {
-				// RPC v0 TODO: Do we want just hash fails?
-				// corruptEver                 | number                      | tr_stat
-				/** 
-				 * Byte count of all the corrupt data you've ever downloaded for
-				 * this torrent. If you're on a poisoned torrent, this number can
-				 * grow very large. 
-				 */
-				value = stats.getDiscarded() + stats.getHashFails();
-
-			} else if (field.equals(FIELD_TORRENT_CREATOR)) {
-				// RPC v0
-				// creator                     | string                      | tr_info
-				value = t.getCreatedBy();
-
-			} else if (field.equals("dateCreated")) {
-
-				// RPC v0
-				// dateCreated                 | number                      | tr_info
-				value = t.getCreationDate();
-
-			} else if (field.equals("desiredAvailable")) {
-				// RPC v0 TODO: stats.getRemainingAvailable() ?
-				// desiredAvailable            | number                      | tr_stat
-				/** 
-				 * Byte count of all the piece data we want and don't have yet,
-				 * but that a connected peer does have. [0...leftUntilDone] 
-				 */
-				value = core_download.getStats().getRemainingExcludingDND();
-
-			} else if (field.equals(FIELD_TORRENT_DATE_DONE)) {
-				// RPC v0
-				// doneDate                    | number                      | tr_stat
-				/** When the torrent finished downloading. */
-				if (core_download.isDownloadComplete(false)) {
-					value = core_download.getDownloadState().getLongParameter(
-							DownloadManagerState.PARAM_DOWNLOAD_COMPLETED_TIME) / 1000;
-				} else {
-					// TODO: Verify what value to send when not complete
-					value = 0;
-				}
-
-			} else if (field.equals(FIELD_TORRENT_DOWNLOAD_DIR)) {
-				// RPC v4
-				// downloadDir                 | string                      | tr_torrent
-
-				if (t.isSimpleTorrent()) {
-					value = new File(download.getSavePath()).getParent();
-				} else {
-					value = download.getSavePath();
-				}
-
-			} else if (field.equals(FIELD_TORRENT_DOWNLOADED_EVER)) {
-				// RPC v0
-				// downloadedEver              | number                      | tr_stat
-
-				/** 
-				 * Byte count of all the non-corrupt data you've ever downloaded
-				 * for this torrent. If you deleted the files and downloaded a second
-				 * time, this will be 2*totalSize.. 
-				 */
-				value = stats.getDownloaded();
-
-			} else if (field.equals("downloadLimit")
-					|| field.equals(TR_PREFS_KEY_DSPEED_KBps)) {
-				// RPC v5 (alternate is from 'set' prior to v5 -- added for rogue clients)
-				// downloadLimit               | number                      | tr_torrent
-
-				/** maximum download speed (KBps) */
-				value = download.getMaximumDownloadKBPerSecond();
-
-			} else if (field.equals("downloadLimited")
-					|| field.equals(TR_PREFS_KEY_DSPEED_ENABLED)) {
-				// RPC v5 (alternate is from 'set' prior to v5 -- added for rogue clients)
-				// downloadLimited             | boolean                     | tr_torrent
-
-				/** true if "downloadLimit" is honored */
-				value = download.getDownloadRateLimitBytesPerSecond() > 0;
-
-			} else if (field.equals(FIELD_TORRENT_ERROR)) {
-				// RPC v0
-				// error                       | number                      | tr_stat
-				/** Defines what kind of text is in errorString. TR_STAT_* */
-
-				value = torrentGet_error(core_download, download);
-
-			} else if (field.equals(FIELD_TORRENT_ERROR_STRING)) {
-				// RPC v0
-				// errorString                 | string                      | tr_stat
-
-				value = torrentGet_errorString(core_download, download);
-
-			} else if (field.equals("eta")) {
-				// RPC v0
-				// eta                         | number                      | tr_stat
-
-				value = torrentGet_eta(core_download, download, stats);
-
-			} else if (field.equals("etaIdle")) {
-				// RPC v15
-				/** If seeding, number of seconds left until the idle time limit is reached. */
-				// TODO: No idea what etaIdle description means! What happens at idle time?
-
-				value = TR_ETA_UNKNOWN;
-
-			} else if (field.equals(FIELD_TORRENT_FILES)) {
-				// RPC v0
-
-				String host = (String)request.getHeaders().get( "host" );
-
-				value = torrentGet_files(torrent, host, download, download_id, file_fields, args);
-				
-				// One hash for all files.  This won't work when our file list is a partial
-				//if (value instanceof Collection) {
-				//	torrent.put("files-hc", longHashSimpleList((Collection<?>) value));
-				//}
-
-			} else if (field.equals(FIELD_TORRENT_FILESTATS)) {
-				// RPC v5
-
-				value = torrentGet_fileStats(download, file_fields, args);
-
-			} else if (field.equals(FIELD_TORRENT_HASH_STRING)) {
-				// RPC v0
-				// hashString                  | string                      | tr_info
-				value = ByteFormatter.encodeString(t.getHash());
-
-			} else if (field.equals("haveUnchecked")) {
-				// haveUnchecked               | number                      | tr_stat
-				/** Byte count of all the partial piece data we have for this torrent.
-				As pieces become complete, this value may decrease as portions of it
-				are moved to `corrupt' or `haveValid'. */
-				// TODO: set when ST_CHECKING?
-				value = 0;
-
-			} else if (field.equals("haveValid")) {
-				// haveValid                   | number                      | tr_stat
-				/** Byte count of all the checksum-verified data we have for this torrent.
-				  */
-				value = stats.getDownloaded();
-
-			} else if (field.equals("honorsSessionLimits")) {
-				// TODO RPC v5
-				// honorsSessionLimits         | boolean                     | tr_torrent
-				/** true if session upload limits are honored */
-				value = false;
-
-			} else if (field.equals("id")) {
-				// id                          | number                      | tr_torrent
-				value = download_id;
-
-			} else if (field.equals("isFinished")) {
-				// RPC v9: TODO
-				// isFinished                  | boolean                     | tr_stat
-				/** A torrent is considered finished if it has met its seed ratio.
-				As a result, only paused torrents can be finished. */
-
-				value = false;
-
-			} else if (field.equals("isPrivate")) {
-				// RPC v0
-				// isPrivate                   | boolean                     | tr_torrent
-				value = t.isPrivate();
-
-			} else if (field.equals("isStalled")) {
-				// RPC v14
-				// isStalled                   | boolean                     | tr_stat
-
-				value = torrentGet_isStalled(download);
-
-			} else if (field.equals(FIELD_TORRENT_LABELS)) {
-				// RPC v16
-				List<String> listTags = new ArrayList<>();
-
-				TagManager tm = TagManagerFactory.getTagManager();
-
-				List<Tag> tags = tm.getTagsForTaggable(core_download);
-				if (tags != null) {
-					for (Tag tag : tags) {
-						listTags.add(tag.getTagName());
-					}
-				}
-
-				value = listTags;
-
-			} else if (field.equals("leechers")) {
-				// Removed in RPC v7
-				value = pm == null ? 0 : pm.getNbPeers();
-
-			} else if (field.equals(FIELD_TORRENT_LEFT_UNTIL_DONE)) {
-				// RPC v0
-				// leftUntilDone               | number                      | tr_stat
-
-				/** Byte count of how much data is left to be downloaded until we've got
-				all the pieces that we want. [0...tr_info.sizeWhenDone] */
-
-				value = core_download.getStats().getRemainingExcludingDND();
-
-			} else if (field.equals("magnetLink")) {
-				// TODO RPC v7
-				// magnetLink                  | number                      | n/a
-				// NOTE: I assume spec is wrong and it's a string..
-
-				value = UrlUtils.getMagnetURI(download);
-
-			} else if (field.equals("manualAnnounceTime")) {
-				// manualAnnounceTime          | number                      | tr_stat
-				// spec is time_t, although it should be relative time. :(
-
-				value = torrentGet_manualAnnounceTime(core_download);
-
-			} else if (field.equals("maxConnectedPeers")) {
-				// maxConnectedPeers           | number                      | tr_torrent
-				// TODO: Some sort of Peer Limit (tr_torrentSetPeerLimit )
-				value = 0;
-
-			} else if (field.equals("metadataPercentComplete")) {
-				// RPC v7: TODO
-				// metadataPercentComplete     | double                      | tr_stat
-				/** 
-				 * How much of the metadata the torrent has.
-				 * For torrents added from a .torrent this will always be 1.
-				 * For magnet links, this number will from from 0 to 1 as the metadata is downloaded.
-				 * Range is [0..1] 
-				 */
-				// RPC v7
-				value = 1.0f;
-
-			} else if (field.equals("name")) {
-
-				value = download.getName();
-
-			} else if (field.equals("peer-limit")) {
-				// peer-limit                  | number                      | tr_torrent
-				// TODO
-				/** how many peers this torrent can connect to */
-				value = -1;
-
-			} else if (field.equals(FIELD_TORRENT_PEERS)) {
-				// RPC v2
-
-				value = torrentGet_peers(core_download);
-
-			} else if (field.equals("peersConnected")) {
-				// peersConnected              | number                      | tr_stat
-
-				/** Number of peers that we're connected to */
-				value = pm == null ? 0 : pm.getNbPeers() + pm.getNbSeeds();
-
-			} else if (field.equals("peersFrom")) {
-
-				value = torrentGet_peersFrom(pm);
-
-			} else if (field.equals("peersGettingFromUs")) {
-				// peersGettingFromUs          | number                      | tr_stat
-
-				value = peers_from_us;
-
-			} else if (field.equals("peersSendingToUs")) {
-				// peersSendingToUs            | number                      | tr_stat
-
-				value = peers_to_us;
-
-			} else if (field.equals(FIELD_TORRENT_PERCENT_DONE)) {
-				// RPC v5
-				// percentDone                 | double                      | tr_stat
-				/** 
-				 * How much has been downloaded of the files the user wants. This differs
-				 * from percentComplete if the user wants only some of the torrent's files.
-				 * Range is [0..1]
-				 */
-				
-				value = core_download.getStats().getPercentDoneExcludingDND() / 1000.0f;
-
-			} else if (field.equals("pieces")) {
-				// RPC v5
-				value = torrentGet_pieces(core_download);
-			} else if (field.equals("pieceCount")) {
-				// pieceCount                  | number                      | tr_info
-				value = t.getPieceCount();
-
-			} else if (field.equals("pieceSize")) {
-				// pieceSize                   | number                      | tr_info
-				value = t.getPieceSize();
-
-			} else if (field.equals(FIELD_TORRENT_PRIORITIES)) {
-
-				value = torrentGet_priorities(download);
-
-			} else if (field.equals(FIELD_TORRENT_POSITION)) {
-				// RPC v14
-				// "queuePosition"       | number     position of this torrent in its queue [0...n)
-
-				value = core_download.getPosition();
-
-			} else if (field.equals(FIELD_TORRENT_RATE_DOWNLOAD)) {
-				// rateDownload (B/s)          | number                      | tr_stat
-				value = stats.getDownloadAverage();
-
-			} else if (field.equals(FIELD_TORRENT_RATE_UPLOAD)) {
-				// rateUpload (B/s)            | number                      | tr_stat
-				value = stats.getUploadAverage();
-
-			} else if (field.equals("recheckProgress")) {
-				// recheckProgress             | double                      | tr_stat
-				value = torrentGet_recheckProgress(core_download, stats);
-
-			} else if (field.equals(FIELD_TORRENT_SECONDS_DOWNLOADING)) {
-				// secondsDownloading          | number                      | tr_stat
-				/** Cumulative seconds the torrent's ever spent downloading */
-				value = stats.getSecondsDownloading();
-
-			} else if (field.equals(FIELD_TORRENT_SECONDS_SEEDING)) {
-				// secondsSeeding              | number                      | tr_stat
-				/** Cumulative seconds the torrent's ever spent seeding */
-				// TODO: Want "only seeding" time, or seeding time (including downloading time)? 
-				value = stats.getSecondsOnlySeeding();
-
-			} else if (field.equals("seedIdleLimit")) {
-				// RPC v10
-				// "seedIdleLimit"       | number     torrent-level number of minutes of seeding inactivity
-				value = (int) stats.getSecondsSinceLastUpload() / 60;
-
-			} else if (field.equals("seedIdleMode")) {
-				// RPC v10: Not used, always TR_IDLELIMIT_GLOBAL
-				// "seedIdleMode"        | number     which seeding inactivity to use.  See tr_inactvelimit
-				value = TR_IDLELIMIT_GLOBAL;
-
-			} else if (field.equals("seedRatioLimit")) {
-				// RPC v5
-				// "seedRatioLimit"      | double     torrent-level seeding ratio
-
-				value = COConfigurationManager.getFloatParameter("Stop Ratio");
-
-			} else if (field.equals("seedRatioMode")) {
-				// RPC v5: Not used, always Global
-				// seedRatioMode               | number                      | tr_ratiolimit
-				value = TR_RATIOLIMIT_GLOBAL;
-
-			} else if (field.equals(FIELD_TORRENT_SIZE_WHEN_DONE)) {
-				// sizeWhenDone                | number                      | tr_stat
-				/** 
-				 * Byte count of all the piece data we'll have downloaded when we're done,
-				 * whether or not we have it yet. This may be less than tr_info.totalSize
-				 * if only some of the torrent's files are wanted.
-				 * [0...tr_info.totalSize] 
-				 **/
-				value = core_download.getStats().getSizeExcludingDND();
-
-			} else if (field.equals(FIELD_TORRENT_DATE_STARTED)) {
-				/** When the torrent was last started. */
-				value = stats.getTimeStarted() / 1000;
-
-			} else if (field.equals(FIELD_TORRENT_STATUS)) {
-
-				value = torrentGet_status(download);
-
-			} else if (field.equals("trackers")) {
-
-				String agent = MapUtils.getMapString(request.getHeaders(), "User-Agent", "");
-				boolean hack = agent.contains("httpok"); // Torrnado
-				value = torrentGet_trackers(core_download, hack);
-
-			} else if (field.equals("trackerStats")) {
-				// RPC v7
-
-				value = torrentGet_trackerStats(core_download);
-
-			} else if (field.equals("totalSize")) {
-
-				value = t.getSize();
-
-			} else if (field.equals("torrentFile")) {
-				// torrentFile                 | string                      | tr_info
-				/** Path to torrent **/
-				value = core_download.getTorrentFileName();
-
-			} else if (field.equals(FIELD_TORRENT_UPLOADED_EVER)) {
-				// uploadedEver                | number                      | tr_stat
-				value = stats.getUploaded();
-
-			} else if (field.equals("uploadLimit") || field.equals(TR_PREFS_KEY_USPEED_KBps)) {
-				// RPC v5 (alternate is from 'set' prior to v5 -- added for rogue clients)
-
-				/** maximum upload speed (KBps) */
-				int bps = download.getUploadRateLimitBytesPerSecond();
-				value = bps <= 0 ? bps : (bps < 1024 ? 1 : bps / 1024);
-
-			} else if (field.equals("uploadLimited")
-					|| field.equals(TR_PREFS_KEY_USPEED_ENABLED)) {
-				// RPC v5 (alternate is from 'set' prior to v5 -- added for rogue clients)
-
-				/** true if "uploadLimit" is honored */
-				value = download.getUploadRateLimitBytesPerSecond() > 0;
-
-			} else if (field.equals(FIELD_TORRENT_UPLOAD_RATIO)) {
-				// uploadRatio                 | double                      | tr_stat
-				int shareRatio = stats.getShareRatio();
-				value = shareRatio <=0 ? shareRatio : stats.getShareRatio() / 1000.0;
-
-			} else if (field.equals(FIELD_TORRENT_WANTED)) {
-
-				value = torrentGet_wanted(download);
-
-			} else if (field.equals("webseeds")) {
-				value = torrentGet_webSeeds(t);
-
-			} else if (field.equals("webseedsSendingToUs")) {
-				value = torrentGet_webseedsSendingToUs(core_download);
-
-			} else if (field.equals("trackerSeeds")) {
-				// Vuze Specific?
-				DownloadScrapeResult scrape = download.getLastScrapeResult();
-				value = new Long(scrape == null ? 0 : scrape.getSeedCount());
-
-			} else if (field.equals("trackerLeechers")) {
-				// Vuze Specific?
-				DownloadScrapeResult scrape = download.getLastScrapeResult();
-				value = new Long(scrape == null ? 0 : scrape.getNonSeedCount());
-
-			} else if (field.equals("speedLimitDownload")) {
-				// Vuze Specific?
-				value = new Long(download.getDownloadRateLimitBytesPerSecond());
-			} else if (field.equals("speedLimitUpload")) {
-				// Vuze Specific?
-				value = new Long(download.getUploadRateLimitBytesPerSecond());
-			} else if (field.equals("seeders")) {
-				// Removed in RPC v7
-				value = pm == null ? -1 : pm.getNbSeeds();
-
-			} else if (field.equals("swarmSpeed")) {
-				// Removed in RPC v7
-				value = new Long(core_download.getStats().getTotalAveragePerPeer());
-			} else if (field.equals("announceResponse")) {
-				// Removed in RPC v7
-
-				TRTrackerAnnouncer trackerClient = core_download.getTrackerClient();
-				if (trackerClient != null) {
-					value = trackerClient.getStatusString();
-				} else {
-					value = "";
-				}
-
-			} else if (field.equals("lastScrapeTime")) {
-				// Unsure of wanted format
-				// Removed in v7
-
-				value = core_download.getTrackerTime();
-
-			} else if (field.equals("scrapeURL")) {
-				// Removed in v7
-				value = "";
-				TRTrackerScraperResponse trackerScrapeResponse = core_download.getTrackerScrapeResponse();
-				if (trackerScrapeResponse != null) {
-					URL url = trackerScrapeResponse.getURL();
-					if (url != null) {
-						value = url.toString();
-					}
-				}
-
-			} else if (field.equals("nextScrapeTime")) {
-				// Removed in v7
-
-				// Unsure of wanted format
-				TRTrackerAnnouncer trackerClient = core_download.getTrackerClient();
-				if (trackerClient != null) {
-					value = trackerClient.getTimeUntilNextUpdate();
-				} else {
-					value = 0;
-				}
-
-			} else if (field.equals("nextAnnounceTime")) {
-				// Removed in v7
-
-				// Unsure of wanted format
-				TRTrackerAnnouncer trackerClient = core_download.getTrackerClient();
-				if (trackerClient != null) {
-					value = trackerClient.getTimeUntilNextUpdate();
-				} else {
-					value = 0;
-				}
-
-			} else if (field.equals("downloadLimitMode")
-					|| field.equals("uploadLimitMode")) {
-				// RPC < v5 -- Not supported -- ignore
-
-			} else if (field.equals("downloaders")
-					|| field.equals("lastAnnounceTime") || field.equals("lastScrapeTime")
-					|| field.equals("scrapeResponse") || field.equals("timesCompleted")) {
-				// RPC < v7 -- Not Supported -- ignore
-
-			} else if (field.equals("peersKnown")) {
-				// RPC < v13 -- Not Supported -- ignore
-
-			} else if (field.equals(FIELD_TORRENT_FILE_COUNT)) {
-				// azRPC
-
-				value = core_download.getNumFileInfos();
-
-			} else if (field.equals("speedHistory")) {
-				// azRPC
-				
-				DownloadManagerStats core_stats = core_download.getStats();
-				core_stats.setRecentHistoryRetention(true);
-				
-				// TODO
-				// [0] send [1] receive [2] swarm
-				int[][] recentHistory = core_stats.getRecentHistory();
-				long now = SystemTime.getCurrentTime();
-				
-				long sinceSecs = getNumber(args.get("speedHistorySinceSecs"), 0).longValue();
-				
-				long since = now - (sinceSecs * 1000);
-				
-				long curEntryTime = now - (recentHistory.length *1000);
-				
-				List listHistory = new ArrayList();
-				for (int i = 0; i < recentHistory.length; i++) {
-					if (curEntryTime > since) {
-  					int[] entry = recentHistory[i];
-  					Map mapHistory = new HashMap(3);
-  					mapHistory.put("upload", entry[0]);
-  					mapHistory.put("download", entry[1]);
-  					mapHistory.put("swarm", entry[2]);
-					
-  					listHistory.add(entry);
-					}
-					
-					curEntryTime += 1000;
-				}
-				
-				value = listHistory;
-				
-				/*
-				 * [
-				 *   {
-				 *   	upload: <upload speed>
-				 *   	download: <dl speed>
-				 *   	swarm: <swarm avg speed>
-				 *   }
-				 * }
-				 */
-			} else if (field.equals("tag-uids")) {
-				// azRPC
-				List<Long> listTags = new ArrayList<>();
-				
-				TagManager tm = TagManagerFactory.getTagManager();
-				
-				List<Tag> tags = tm.getTagsForTaggable(core_download);
-				if (tags == null || tags.isEmpty()) {
-					Category catAll = CategoryManager.getCategory(Category.TYPE_ALL);
-					if (catAll != null) {
-						listTags.add(catAll.getTagUID());
-					}
-					Category catUncat = CategoryManager.getCategory(Category.TYPE_UNCATEGORIZED);
-					if (catUncat != null) {
-						listTags.add(catUncat.getTagUID());
-					}
-				} else {
-  				for (Tag tag : tags) {
-  					listTags.add(tag.getTagUID());
-  				}
-				}
-				
-				value = listTags;
-
-			} else {
-				if ( trace_param.getValue() ){
-					log("Unhandled get-torrent field: " + field);
-				}
-			}
-
-			if (value != null) {
-
-				if (xmlEscape && (value instanceof String)) {
-
-					value = escapeXML((String) value);
-				}
-				torrent.put(field, value);
-			}
-		} // for fields		
-	}
-
-	private void method_Torrent_Get_Stub(
-			TrackerWebPageRequest request,
-			Map args, 
-			List<String> fields,
-			Map<Long, Map<String, Object>> torrent_info,
-			DownloadStub download_stub,
-			List<String> file_fields,
-			boolean xmlEscape) 
-	{
-		
-		Map<String, Object> torrent = new LinkedHashMap<>();
-		
-		long download_id = getID( download_stub, true );
-		
-		torrent_info.put( download_id, torrent );
-
-		boolean	is_magnet_download = download_stub instanceof MagnetDownload;
-		
-		long 	status		= 0;
-		long 	error 		= TR_STAT_OK;
-		String 	error_str 	= "";
-		String	created_by	= "";
-		long	create_date	= 0;
-		float	md_comp		= 1.0f;
-		
-		if ( is_magnet_download ){
-			
-			MagnetDownload md = (MagnetDownload)download_stub;
-			
-			TagManager tm = TagManagerFactory.getTagManager();
-			
-			Throwable e = md.getError();
-			
-			if ( e == null ){
-				
-				status = 4;
-				
-				md_comp		= 0.0f;
-
-				if (fields.contains("tag-uids")) {
-  				List listTags = new ArrayList();
-  				Tag tag = getTagFromState(Download.ST_DOWNLOADING, false);
-  				if (tag != null) {
-  					listTags.add(tag.getTagUID());
-  				}
-  				// 7, "tag.type.ds.act"
-  				tag = tm.getTagType(TagType.TT_DOWNLOAD_STATE).getTag(7);
-  				if (tag != null) {
-  					listTags.add(tag.getTagUID());
-  				}
-  				
-  				torrent.put("tag-uids", listTags);
-				}
-
-			}else{
-				
-				status		= 0;
-				
-				error 		= TR_STAT_LOCAL_ERROR;
-				
-				Throwable temp = e;
-				
-				while( temp.getCause() != null ){
-					
-					temp = temp.getCause();
-				}
-				
-				String last_msg = temp.getMessage();
-				
-				if ( last_msg != null && last_msg.length() > 0 ){
-					
-					error_str = last_msg;
-					
-				}else{
-					
-					error_str = getCausesMesssages( e );
-				}
-				
-				String magnet_url = md.getMagnetURL().toExternalForm();
-				
-				int	pos = error_str.indexOf( magnet_url );
-				
-				// tidy up the most common error messages by removing magnet uri from them and
-				// trimming prefix of 'Error:'
-				
-				if ( pos != -1 ){
-					
-					error_str = error_str.substring(0,pos) + error_str.substring( pos+magnet_url.length());
-				}
-				
-				error_str = error_str.trim();
-				
-				pos = error_str.indexOf( "rror:");
-				
-				if ( pos != -1 ){
-					
-					error_str = error_str.substring( pos+5 ).trim();
-				}
-				
-				if ( error_str.length() > 0 ){
-					
-						// probably not great for right-left languages but derp
-					
-					error_str = Character.toUpperCase( error_str.charAt(0)) + error_str.substring(1);
-				}
-
-				if (fields.contains("tag-uids")) {
-					List listTags = new ArrayList();
-					Tag tag = getTagFromState(Download.ST_STOPPED, true);
-					if (tag != null) {
-						listTags.add(tag.getTagUID());
-					}
-					
-					torrent.put("tag-uids", listTags);
-				}
-			}
-			
-			created_by	= "Vuze";
-			create_date	= md.getCreateTime()/1000;
-
-		}
-		
-		long	size = download_stub.getTorrentSize();
-			
-		
-		//System.out.println( fields );
-
-		// @formatter:off
-		Object[][] stub_defs = {
-		{ FIELD_TORRENT_DATE_ACTIVITY, 0 },
-		{ "activityDateRelative",0 },
-		{ FIELD_TORRENT_DATE_ADDED, is_magnet_download?create_date:0 },
-		{ FIELD_TORRENT_COMMENT, is_magnet_download?"Metadata Download": "Download Archived" },
-		{ "corruptEver", 0 },
-		{ FIELD_TORRENT_CREATOR, created_by },
-		{ "dateCreated", create_date },
-		{ "desiredAvailable", 0 },
-		//{ "downloadDir", "" },
-		{ FIELD_TORRENT_DOWNLOADED_EVER, 0 },
-		{ FIELD_TORRENT_ERROR, error },
-		{ FIELD_TORRENT_ERROR_STRING, error_str },
-		{ "eta", TR_ETA_NOT_AVAIL },
-		//{ "fileStats", "" },
-		//{ "files", "" },
-		//{ FIELD_TORRENT_HASH, "" },
-		{ "haveUnchecked", 0 },
-		//{ "haveValid", "" },
-		//{ "id", "" },
-		{ "isFinished", is_magnet_download?false:true },
-		{ "isPrivate", false },
-		{ "isStalled", false },
-		{ FIELD_TORRENT_LEFT_UNTIL_DONE, is_magnet_download?size:0 },	// leftUntilDone is used to mark downloads as incomplete
-		{ "metadataPercentComplete",md_comp },
-		//{ "name", "" },
-		{ FIELD_TORRENT_PEERS, new ArrayList() },
-		{ "peersConnected", 0 },
-		{ "peersGettingFromUs", 0 },
-		{ "peersSendingToUs", "" },
-		{ FIELD_TORRENT_PERCENT_DONE, is_magnet_download?0.0f:100.0f },
-		{ "pieceCount", 1 },
-		{ "pieceSize", size==0?1:size },
-		{ FIELD_TORRENT_POSITION, 0 },
-		{ FIELD_TORRENT_RATE_DOWNLOAD, 0 },
-		{ FIELD_TORRENT_RATE_UPLOAD, 0 },
-		{ "recheckProgress", 0.0f },
-		{ "seedRatioLimit", 1.0f },
-		{ "seedRatioMode", TR_RATIOLIMIT_GLOBAL },
-		//{ "sizeWhenDone", "" },
-		{ FIELD_TORRENT_DATE_STARTED, is_magnet_download?create_date:0 },
-		{ FIELD_TORRENT_STATUS, status },
-		//{ "totalSize", "" },
-		{ "trackerStats", new ArrayList() },
-		{ "trackers", new ArrayList() },
-		{ FIELD_TORRENT_UPLOAD_RATIO, 0.0f },
-		{ FIELD_TORRENT_UPLOADED_EVER, 0 },
-		{ "webseedsSendingToUs", 0 },
-		{ "torrentFile", "" }
-		};
-		// @formatter:on
-		
-		
-		Map<String,Object>	stub_def_map = new HashMap<>();
-		
-		for ( Object[] d: stub_defs ){
-			stub_def_map.put( (String)d[0], d[1] );
-		}
-		
-		for ( String field: fields ){
-			
-			Object	value = stub_def_map.get( field );
-			
-			if ( field.equals( "id" )){
-				
-				value = download_id;
-				
-			}else if ( field.equals(FIELD_TORRENT_DOWNLOAD_DIR)){
-									
-				value = download_stub.getSavePath();
-					
-			}else if ( field.equals(FIELD_TORRENT_FILES)){
-
-				String host = (String)request.getHeaders().get( "host" );
-
-				value = torrentGet_files_stub(host, download_stub, download_id,
-						file_fields, args);
-
-			}else if ( field.equals(FIELD_TORRENT_FILE_COUNT)){
-
-				value = download_stub.getStubFiles().length;
-
-			}else if ( field.equals(FIELD_TORRENT_FILESTATS)){
-				// RPC v5
-
-				value = torrentGet_fileStats_stub(download_stub, file_fields, args);
-
-			}else if ( field.equals( FIELD_TORRENT_HASH_STRING )){
-				
-				value = ByteFormatter.encodeString( download_stub.getTorrentHash());
-				
-			}else if ( field.equals( "haveValid" )){
-
-				value = is_magnet_download?0:size;
-			
-			}else if ( field.equals(FIELD_TORRENT_NAME)){
-
-				value = download_stub.getName();
-				
-			}else if ( field.equals(FIELD_TORRENT_SIZE_WHEN_DONE)){
-
-				value = size;
-				
-			}else if ( field.equals( "totalSize" )){
-
-				value = size;
-
-			} else if (field.equals("tag-uids")) {
-				// azRPC
-				List listTags = MapUtils.getMapList(torrent, field, new ArrayList());
-				
-				TagManager tm = TagManagerFactory.getTagManager();
-
-				if (listTags.size() == 0) {
-					Tag tag = getTagFromState(Download.ST_STOPPED, !is_magnet_download);
-					if (tag != null) {
-						listTags.add(tag.getTagUID());
-					}
-
-					//  9, "tag.type.ds.inact"
-					tag = tm.getTagType(TagType.TT_DOWNLOAD_STATE).getTag(9);
-					if (tag != null) {
-						listTags.add(tag.getTagUID());
-					}
-				}
-				
-				// 11, "tag.type.ds.incomp"
-				// 10, incomplete
-				Tag tag = tm.getTagType(TagType.TT_DOWNLOAD_STATE).getTag(is_magnet_download ? 11 : 10);
-				if (tag != null) {
-					listTags.add(tag.getTagUID());
-				}
-				
-				Category catAll = CategoryManager.getCategory(Category.TYPE_ALL);
-				if (catAll != null) {
-					listTags.add(catAll.getTagUID());
-				}
-				Category catUncat = CategoryManager.getCategory(Category.TYPE_UNCATEGORIZED);
-				if (catUncat != null) {
-					listTags.add(catUncat.getTagUID());
-				}
-				
-				value = listTags;
-			}
-
-			
-			if ( value != null ){
-			
-				if (xmlEscape && (value instanceof String)) {
-				
-					value = escapeXML((String)value);
-				}
-				
-				torrent.put( field, value );
-				
-			}else{
-				if ( trace_param.getValue() ){
-					log( "Unknown stub field: " + field );
-				}
-			}
-		}
-	}
-	
-	private Tag getTagFromState(int state, boolean complete) {
-		/*
-		 	tag_initialising		= new MyTag( 0, "tag.type.ds.init",
-			tag_downloading			= new MyTag( 1, "tag.type.ds.down",
-			tag_seeding				= new MyTag( 2, "tag.type.ds.seed", 
-			tag_queued_downloading	= new MyTag( 3, "tag.type.ds.qford"
-			tag_queued_seeding		= new MyTag( 4, "tag.type.ds.qfors", 
-			tag_stopped				= new MyTag( 5, "tag.type.ds.stop", 
-			tag_error				= new MyTag( 6, "tag.type.ds.err", 
-	 */
-		int id = 0;
-
-		switch (state) {
-			case Download.ST_DOWNLOADING:
-				id = 1;
-				break;
-			case Download.ST_SEEDING:
-				id = 2;
-				break;
-			case Download.ST_QUEUED:
-				id = complete ? 4 : 3;
-				break;
-			case Download.ST_STOPPED:
-			case Download.ST_STOPPING:
-				id = 5;
-				break;
-			case Download.ST_ERROR:
-				id = 6;
-				break;
-		}
-		TagManager tm = TagManagerFactory.getTagManager();
-		return tm.getTagType(TagType.TT_DOWNLOAD_STATE).getTag(id);
-	}
-	
-	/** Number of webseeds that are sending data to us. */
-  private Object torrentGet_webseedsSendingToUs(DownloadManager core_download) {
-  	PEPeerManager peerManager = core_download.getPeerManager();
-  	if (peerManager == null) {
-  		return 0;
-  	}
-		int numWebSeedsConnected = 0;
-		List<PEPeer> peers = peerManager.getPeers();
-		for (PEPeer peer : peers) {
-			if (peer.getProtocol().toLowerCase().startsWith( "http" )){
-				numWebSeedsConnected++;
-			}
-		}
-		return numWebSeedsConnected;
-	}
-
-	private Object torrentGet_webSeeds(Torrent t) {
-    // webseeds           
-    // | an array of strings:                 |
-    // +-------------------------+------------+
-    // | webseed                 | string     | tr_info
-		List getright = BDecoder.decodeStrings(getURLList(t, "url-list"));
-		List webseeds = BDecoder.decodeStrings(getURLList(t, "httpseeds"));
-
-		List list = new ArrayList();
-		for (List l : new List[] {
-			getright,
-			webseeds
-		}) {
-
-			for (Object o : l) {
-				if (o instanceof String) {
-					list.add(o);
-				}
-			}
-		}
-		return list;
-	}
-
-	/** 
-   * When tr_stat.activity is TR_STATUS_CHECK or TR_STATUS_CHECK_WAIT,
-   * this is the percentage of how much of the files has been 
-   * verified. When it gets to 1, the verify process is done.
-   * Range is [0..1]
-   **/
-	private Object torrentGet_recheckProgress(DownloadManager core_download,
-			DownloadStats stats) {
-		double x = 1;
-		
-		if ( core_download.getState() == DownloadManager.STATE_CHECKING ){
-			
-			DiskManager dm = core_download.getDiskManager();
-			
-			if ( dm != null ){
-				
-				x = ((double)stats.getCompleted())/1000;
-			}
-		}
-		
-		return x;
-	}
-
-	private Object torrentGet_priorities(Download download) {
-    // | an array of tr_info.filecount        | tr_info
-    // | numbers. each is the tr_priority_t   |
-    // | mode for the corresponding file.     |
-		List list = new ArrayList();
-		
-		DiskManagerFileInfo[] fileInfos = download.getDiskManagerFileInfo();
-		
-		for (DiskManagerFileInfo fileInfo : fileInfos) {
-			int priority = fileInfo.getNumericPriority();
-			long newPriority = TransmissionVars.convertVuzePriority(priority);
-			list.add(newPriority);
-		}
-		
-		return list;
-	}
-
-	private Object torrentGet_pieces(DownloadManager core_download) {
-  	Object value = "";
-
-		// TODO: No idea if this works
-		// pieces | string             
-		// | A bitfield holding pieceCount flags  | tr_torrent
-		// | which are set to 'true' if we have   |
-		// | the piece matching that position.    |
-		// | JSON doesn't allow raw binary data,  |
-		// | so this is a base64-encoded string.  |
-
-		DiskManager dm = core_download.getDiskManager();
-		
-		if ( dm != null ){
-			DiskManagerPiece[] pieces = dm.getPieces();
-			byte[] bits = new byte[ (int) Math.ceil(pieces.length / 8.0f)];
-			int pieceNo = 0;
-			int bitPos = 0;
-			while (pieceNo < pieces.length) {
-				
-				bits[bitPos] = 0;
-				for (int i = 0; pieceNo < pieces.length && i < 8; i++) {
-					boolean done = pieces[pieceNo].isDone();
-					
-					if (done) {
-						bits[bitPos] |= (byte)(1 << i);
-					}
-					
-					pieceNo++;
-				}
-				
-				bitPos++;
-			}
-			try {
-				value = new String( Base64.encode(bits), "UTF8");
-			} catch (UnsupportedEncodingException e) {
-			}
-		}
-		return value;
-	}
-
-	private Object torrentGet_peersFrom(PEPeerManager pm) {
-    // peersFrom          | an object containing:                |
-    // +-------------------------+------------+
-    // | fromCache               | number     | tr_stat
-    // | fromDht                 | number     | tr_stat
-    // | fromIncoming            | number     | tr_stat
-    // | fromLpd                 | number     | tr_stat
-    // | fromLtep                | number     | tr_stat
-    // | fromPex                 | number     | tr_stat
-    // | fromTracker             | number     | tr_stat
-
-		Map<String, Long> mapPeersFrom = new HashMap<>();
-
-		if (pm == null) {
-			return mapPeersFrom;
-		}
-			
-		List<PEPeer> peers = pm.getPeers();
-		
-		for ( PEPeer peer: peers ){
-			
-			String peerSource = peer.getPeerSource();
-			if (peerSource != null) {
-				if (peerSource.equals(PEPeerSource.PS_BT_TRACKER)) {
-					peerSource = "fromTracker";
-				} else if (peerSource.equals(PEPeerSource.PS_DHT)) {
-					peerSource = "fromDht";
-				} else if (peerSource.equals(PEPeerSource.PS_INCOMING)) {
-					peerSource = "fromIncoming";
-				} else if (peerSource.equals(PEPeerSource.PS_OTHER_PEER)) {
-					peerSource = "fromPex";
-				} else if (peerSource.equals(PEPeerSource.PS_PLUGIN)) {
-					// TODO: better cat?
-					peerSource = "fromCache";
-				} else {
-					peerSource = "fromCache";
-				} // missing: from Ltep
-				if (!mapPeersFrom.containsKey(peerSource)) {
-					mapPeersFrom.put(peerSource, 1l);
-				} else {
-					mapPeersFrom.put(peerSource, mapPeersFrom.get(peerSource) + 1);
-				}
-			}
-		}
-
-		return mapPeersFrom;
-	}
-
-	/** 
-   * time when one or more of the torrent's trackers will
-   * allow you to manually ask for more peers,
-   * or 0 if you can't 
-   */
-	private Object torrentGet_manualAnnounceTime(DownloadManager manager) {
-		// See ScrapeInfoView's updateButton logic
-		Object value;
-		TRTrackerAnnouncer trackerClient = manager.getTrackerClient();
-		if (trackerClient != null) {
-
-			value = Math.max(SystemTime.getCurrentTime() / 1000,
-					trackerClient.getLastUpdateTime() + TRTrackerAnnouncer.REFRESH_MINIMUM_SECS);
-					
-		} else {
-			// Technically the spec says "ask for more peers" which suggests
-			// we don't need to handle scrape -- but let's do it anyway
-
-			TRTrackerScraperResponse sr = manager.getTrackerScrapeResponse();
-			
-			if ( sr == null ){
-				
-				value = 0;
-				
-			}else{
-				
-				value = Math.max(SystemTime.getCurrentTime() / 1000,
-						sr.getScrapeStartTime() / 1000 + TRTrackerScraper.REFRESH_MINIMUM_SECS);
-			}
-		}
-
-		return value;
-	}
-
-	/** 
-	 * If downloading, estimated number of seconds left until the torrent is done.
-	 * If seeding, estimated number of seconds left until seed ratio is reached. 
-	 */
-	private Object torrentGet_eta(DownloadManager core_download, Download download, DownloadStats stats ){
-		Object value;
-
-		int state = download.getState();
-		if (state == Download.ST_DOWNLOADING) {
-			long eta_secs = core_download.getStats().getSmoothedETA();
-			//long eta_secs = stats.getETASecs();
-			
-			if (eta_secs == -1) {
-				value = TR_ETA_NOT_AVAIL;
-			} else if (eta_secs >= 315360000000L) {
-				value = TR_ETA_UNKNOWN;
-			} else {
-				value = eta_secs;
-			}
-		} else if (state == Download.ST_SEEDING) {
-			// TODO: secs left until SR met
-			value = TR_ETA_NOT_AVAIL;
-		} else {
-			value = TR_ETA_NOT_AVAIL;
-		}
-		
-		return value;
-	}
-	
-	private Object torrentGet_trackers(DownloadManager core_download, boolean hack) {
-		List	trackers = new ArrayList();
-
-		List<TrackerPeerSource> trackerPeerSources = core_download.getTrackerPeerSources();
-		
-		if (trackerPeerSources == null) {
-			return trackers;
-		}
-
-		for (TrackerPeerSource tps : trackerPeerSources) {
-	    String statusString = tps.getStatusString();
-	    if (statusString == null) {
-	    	statusString = "";
-	    }
-
-	    Map<String, Object> map = new HashMap<>();
-      //trackers           | array of objects, each containing:   |
-      //+-------------------------+------------+
-      //| announce                | string     | tr_tracker_info
-      //| id                      | number     | tr_tracker_info
-      //| scrape                  | string     | tr_tracker_info
-      //| tier                    | number     | tr_tracker_info
-
-	    String name = "";
-	    try {
-		    name = tps.getName();
-	    } catch (Exception e) {
-	    	name = tps.getClass().getSimpleName();
-	    	// NPE at com.aelitis.azureus.pif.extseed.ExternalSeedPlugin$5.getName(ExternalSeedPlugin.java:561
-	    }
-	    
-	    if (hack && !name.contains("://")) {
-	    	name = "://" + name;
-	    }
-	    
-	    map.put("id", tps.hashCode());
-	    /* the full announce URL */
-	    map.put("announce", name); // TODO
-	    /* the full scrape URL */
-	    map.put("scrape", name); // TODO
-	    /* which tier this tracker is in */
-	    map.put("tier", 0); // TODO: int);
-
-
-	    
-	    trackers.add(map);
-		}
-
-		return trackers;
-	}
-
-	private Object torrentGet_trackerStats(DownloadManager core_download) {
-		List	tracker_stats = new ArrayList();
-
-		List<TrackerPeerSource> trackerPeerSources = core_download.getTrackerPeerSources();
-		
-		if (trackerPeerSources == null) {
-			return tracker_stats;
-		}
-
-		for (TrackerPeerSource tps : trackerPeerSources) {
-	    String statusString = tps.getStatusString();
-	    if (statusString == null) {
-	    	statusString = "";
-	    }
-
-	    Map<String, Object> map = new HashMap<>(64);
-			
-	    /* how many downloads this tracker knows of (-1 means it does not know) */
-	    map.put("downloadCount", -1); // TODO
-
-	    /* whether or not we've ever sent this tracker an announcement */
-	    map.put("hasAnnounced", tps.getPeers() >= 0); // TODO
-
-	    /* whether or not we've ever scraped to this tracker */
-	    map.put("hasScraped", false); // todo: bool);
-
-	    String name = "";
-	    try {
-		    name = tps.getName();
-	    } catch (Exception e) {
-	    	// NPE at com.aelitis.azureus.pif.extseed.ExternalSeedPlugin$5.getName(ExternalSeedPlugin.java:561
-	    }
-
-	    /* human-readable string identifying the tracker */
-    	map.put("host", name); // TODO
-
-	    /* the full announce URL */
-	    map.put("announce", name); // TODO
-
-	    /* the full scrape URL */
-	    map.put("scrape", name); // TODO
-
-	    /* Transmission uses one tracker per tier,
-	     * and the others are kept as backups */
-	    map.put("isBackup", false); // TODO
-
-	    /* is the tracker announcing, waiting, queued, etc */
-	    int status = tps.getStatus();
-	    int state;
-	    if (status == tps.ST_AVAILABLE || status == tps.ST_ONLINE) {
-	    	state = TR_TRACKER_WAITING;
-	    } else if (status == tps.ST_UPDATING) {
-	    	state = TR_TRACKER_ACTIVE; 
-	    } else if (status == tps.ST_QUEUED) {
-	    	state = TR_TRACKER_QUEUED; 
-	    } else {
-	    	state = TR_TRACKER_INACTIVE;
-	    }
-	    map.put("announceState", state);
-
-	    /* is the tracker scraping, waiting, queued, etc */
-	    map.put("scrapeState", state);
-
-	    /* number of peers the tracker told us about last time.
-	     * if "lastAnnounceSucceeded" is false, this field is undefined */
-	    map.put("lastAnnouncePeerCount", tps.getPeers());
-
-	    /* human-readable string with the result of the last announce.
-	       if "hasAnnounced" is false, this field is undefined */
-	    if (statusString != null) {
-	    	map.put("lastAnnounceResult", statusString);
-	    }
-
-	    /* when the last announce was sent to the tracker.
-	     * if "hasAnnounced" is false, this field is undefined */
-	    map.put("lastAnnounceStartTime", 0); // TODO: time_t);
-
-	    /* whether or not the last announce was a success.
-	       if "hasAnnounced" is false, this field is undefined */
-	    map.put("lastAnnounceSucceeded", tps.getPeers() >= 0);
-
-	    /* whether or not the last announce timed out. */
-	    map.put("lastAnnounceTimedOut", false); // TODO
-
-	    /* when the last announce was completed.
-	       if "hasAnnounced" is false, this field is undefined */
-	    map.put("lastAnnounceTime", 0); // TODO: time_t);
-
-	    /* human-readable string with the result of the last scrape.
-	     * if "hasScraped" is false, this field is undefined */
-	    if (statusString != null) {
-	    	map.put("lastScrapeResult", statusString);
-	    }
-
-	    /* when the last scrape was sent to the tracker.
-	     * if "hasScraped" is false, this field is undefined */
-	    map.put("lastScrapeStartTime", 0); // TODO: time_t);
-
-	    /* whether or not the last scrape was a success.
-	       if "hasAnnounced" is false, this field is undefined */
-	    map.put("lastScrapeSucceeded", tps.getPeers() >= 0);
-
-	    /* whether or not the last scrape timed out. */
-	    map.put("lastScrapeTimedOut", false); // TODO: bool);
-
-	    /* when the last scrape was completed.
-	       if "hasScraped" is false, this field is undefined */
-	    map.put("lastScrapeTime", 0); // TODO: time_t);
-
-	    /* number of leechers this tracker knows of (-1 means it does not know) */
-	    map.put("leecherCount", tps.getLeecherCount());
-
-	    /* when the next periodic announce message will be sent out.
-	       if announceState isn't TR_TRACKER_WAITING, this field is undefined */
-	    map.put("nextAnnounceTime", 0); // TODO: time_t);
-
-	    /* when the next periodic scrape message will be sent out.
-	       if scrapeState isn't TR_TRACKER_WAITING, this field is undefined */
-	    map.put("nextScrapeTime", 0); // TODO: time_t);
-
-	    /* number of seeders this tracker knows of (-1 means it does not know) */
-	    map.put("seederCount", tps.getSeedCount());
-
-	    /* which tier this tracker is in */
-	    map.put("tier", 0); // TODO: int);
-
-	    /* used to match to a tr_tracker_info */
-	    map.put("id", tps.hashCode());
-	    
-	    tracker_stats.add(map);
-		}
-
-		return tracker_stats;
-	}
-
-	private Object torrentGet_status(Download download) {
-		// 1 - waiting to verify
-		// 2 - verifying
-		// 4 - downloading
-		// 5 - queued (incomplete)
-		// 8 - seeding
-		// 9 - queued (complete)
-		// 16 - paused
-	
-		// 2.71 - these changed!
-
-	    //TR_STATUS_STOPPED        = 0, /* Torrent is stopped */
-	    //TR_STATUS_CHECK_WAIT     = 1, /* Queued to check files /*
-	    //TR_STATUS_CHECK          = 2, /* Checking files */
-	    //TR_STATUS_DOWNLOAD_WAIT  = 3, /* Queued to download */
-	    //TR_STATUS_DOWNLOAD       = 4, /* Downloading */
-	    //TR_STATUS_SEED_WAIT      = 5, /* Queued to seed */
-	    //TR_STATUS_SEED           = 6  /* Seeding */
-	   
-  	final int CHECK_WAIT;
-  	final int CHECKING;
-  	final int DOWNLOADING;
-  	final int QUEUED_INCOMPLETE;
-  	final int QUEUED_COMPLETE;
-  	final int STOPPED;
-  	final int SEEDING;
-  	final int ERROR;
-
-  	boolean	RPC_14_OR_HIGHER = true; // fields.contains( "percentDone" );
-  	
-  	if ( RPC_14_OR_HIGHER ){
-  		
-  		CHECK_WAIT			= 1;
-  		CHECKING			= 2;
-  		DOWNLOADING			= 4;
-  		QUEUED_INCOMPLETE	= 3;
-  		QUEUED_COMPLETE		= 5;
-  		STOPPED				= 0;
-  		SEEDING				= 6;
-  		ERROR				= STOPPED;
-  	}else{
-  		CHECK_WAIT			= 1;
-  		CHECKING			= 2;
-  		DOWNLOADING			= 4;
-  		QUEUED_INCOMPLETE	= 5;
-  		QUEUED_COMPLETE		= 9;
-  		STOPPED				= 16;
-  		SEEDING				= 8;
-  		ERROR				= 0;
-  	}
-  	
-  	int	status_int;
-  	
-		int state = download.getState();
-		
-		if ( state == Download.ST_DOWNLOADING ){
-			
-			status_int = DOWNLOADING;
-			
-		}else if ( state == Download.ST_SEEDING ){
-			
-			status_int = SEEDING;
-			
-		}else if ( state == Download.ST_QUEUED ){
-
-			if ( download.isComplete()){
-				
-				status_int = QUEUED_COMPLETE;
-				
-			}else{
-				
-				status_int = QUEUED_INCOMPLETE;
-			}
-		}else if ( state == Download.ST_STOPPED || state == Download.ST_STOPPING ){
-			
-			status_int = STOPPED;
-			
-		}else if ( state == Download.ST_ERROR ){
-			
-			status_int = ERROR;
-			
-		}else{
-			
-			DownloadManager	core_download = PluginCoreUtils.unwrap( download );
-			if ( core_download.getState() == DownloadManager.STATE_CHECKING ){
-			
-				status_int = CHECKING;
-				
-			}else{
-				
-				status_int = CHECK_WAIT;
-			}
-		}
-  	
-  	return status_int;
-	}
-
-	private Object torrentGet_wanted(Download download) {
-    // wanted             
-    // | an array of tr_info.fileCount        | tr_info
-    // | 'booleans' true if the corresponding |
-    // | file is to be downloaded.            |
-		List<Object> list = new ArrayList<>();
-		
-		DiskManagerFileInfo[] files = download.getDiskManagerFileInfo();
-		
-		for ( DiskManagerFileInfo file: files ){
-			list.add( !file.isSkipped() );
-		}
-		
-		return list;
-	}
-
-	private Object torrentGet_fileStats(
-			Download download, 
-			List<String> file_fields,
-			Map args) {
-		// | a file's non-constant properties.    |
-    // | array of tr_info.filecount objects,  |
-    // | each containing:                     |
-    // +-------------------------+------------+
-    // | bytesCompleted          | number     | tr_torrent
-    // | wanted                  | boolean    | tr_info
-    // | priority                | number     | tr_info
-		List<Map> stats_list = new ArrayList<>();
-		
-		DiskManagerFileInfo[] files = download.getDiskManagerFileInfo();
-		
-		for (int i = 0; i < files.length; i++) {
-			DiskManagerFileInfo file = files[i];
-			
-			TreeMap map = new TreeMap();
-
-			stats_list.add(map);
-
-			torrentGet_fileStats(map, file_fields, file);
-		}
-		
-		return stats_list;
-	}
-
-	private void torrentGet_fileStats(Map map, List<String> sortedFields,
-			DiskManagerFileInfo file) {
-		boolean all = sortedFields == null || sortedFields.size() == 0;
-
-		if (all
-				|| Collections.binarySearch(sortedFields,
-						FIELD_FILESTATS_BYTES_COMPLETED) >= 0) {
-			map.put(FIELD_FILESTATS_BYTES_COMPLETED, file.getDownloaded());
-		}
-		if (all
-				|| Collections.binarySearch(sortedFields, FIELD_FILESTATS_WANTED) >= 0) {
-			map.put(FIELD_FILESTATS_WANTED, !file.isSkipped());
-		}
-
-		if (all
-				|| Collections.binarySearch(sortedFields, FIELD_FILESTATS_PRIORITY) >= 0) {
-			map.put(FIELD_FILESTATS_PRIORITY,
-					TransmissionVars.convertVuzePriority(file.getNumericPriority()));
-		}
-	}
-
-	private Object torrentGet_fileStats_stub(
-			DownloadStub download_stub,
-			List<String> file_fields,
-			Map args)
-	{
-		DownloadStubFile[] stubFiles = download_stub.getStubFiles();
-		
-		List<Map>	stats_list = new ArrayList<>();
-	
-		for (int i = 0; i < stubFiles.length; i++) {
-			
-			TreeMap	map = new TreeMap();
-			stats_list.add(map);
-
-			DownloadStubFile sf = stubFiles[i];
-			torrentGet_fileStats_stub(map, null, sf);
-		}
-		
-		return stats_list;
-	}
-
-	private void torrentGet_fileStats_stub(Map map, List<String> sortedFields,
-			DownloadStubFile sf) {
-		long len = sf.getLength();
-
-		boolean all = sortedFields == null || sortedFields.size() == 0;
-
-		if (all
-				|| Collections.binarySearch(sortedFields,
-						FIELD_FILESTATS_BYTES_COMPLETED) >= 0) {
-
-			long downloaded = len < 0 ? 0 : len;
-
-			map.put(FIELD_FILESTATS_BYTES_COMPLETED, downloaded);
-		}
-		if (all
-				|| Collections.binarySearch(sortedFields, FIELD_FILESTATS_WANTED) >= 0) {
-			map.put(FIELD_FILESTATS_WANTED, len >= 0);
-		}
-
-		if (all
-				|| Collections.binarySearch(sortedFields, FIELD_FILESTATS_PRIORITY) >= 0) {
-			map.put(FIELD_FILESTATS_PRIORITY, TransmissionVars.convertVuzePriority(0));
-		}
-	}
-
-	private Object torrentGet_files(
-			Map mapParent,
-			String host,
-			Download download,
-			long download_id,
-			List<String> file_fields,
-			Map args)
-	{
-		// | array of objects, each containing:   |
-    // +-------------------------+------------+
-    // | bytesCompleted          | number     | tr_torrent
-    // | length                  | number     | tr_info
-    // | name                    | string     | tr_info
-		// | index                   | number
-		// | hc                      | number     | hashcode to be later used to suppress return of file map
-
-		List file_list = new ArrayList<>();
-
-		// Skip files that match these hashcodes
-		List listHCs = getMapList(args, "files-hc-" + download_id, ',', null);
-
-		DiskManagerFileInfo[] files = download.getDiskManagerFileInfo();
-		
-		int[] file_indexes = getFileIndexes(args, download_id);
-
-		boolean mapPerFile = MapUtils.getMapBoolean(args, "mapPerFile", true);
-
-		String baseURL = MapUtils.getMapString(args, "base-url", null);
-
-		boolean all = file_fields == null || file_fields.size() == 0;
-		if (!all) {
-			// sort so we can't use Collections.binarySearch
-			Collections.sort(file_fields);
-		}
-
-
-		boolean didFileKeys = false;
-		if (file_indexes == null || file_indexes.length == 0) {
-			// We don't need to include the index if returning all files (file index request is null and there's no files-hc-*)
-			boolean addIndex = !all
-					|| (file_fields != null
-							&& Collections.binarySearch(file_fields, FIELD_FILES_INDEX) >= 0)
-					|| listHCs != null;
-
-			for (int i = 0; i < files.length; i++) {
-				DiskManagerFileInfo file = files[i];
-  			
-				TreeMap map = new TreeMap();
-
-				if (addIndex) {
-					map.put(FIELD_FILES_INDEX, i);
-				}
-
-  			torrentGet_files(map, file_fields, host, baseURL, download, file);
-  			if (file_fields != null && file_fields.size() > 0) {
-  				torrentGet_fileStats(map, file_fields, file);
-  			}
-
-  			if (mapPerFile) {
-					hashAndAdd(map, file_list, listHCs, i);
-			  } else {
-					if (hashAndAddAsCollection(map, file_list, listHCs, i) && !didFileKeys) {
-					  mapParent.put("fileKeys", new ArrayList(map.keySet()));
-					  didFileKeys = true;
-				  }
-			  }
-  		}
-		} else {
-			for (int i = 0; i < file_indexes.length; i++) {
-				int file_index = file_indexes[i];
-				if (file_index < 0 || file_index >= files.length) {
-					continue;
-				}
-
-				TreeMap<String, Object> map = new TreeMap<>();
-
-				map.put(FIELD_FILES_INDEX, file_index);
-				DiskManagerFileInfo fileInfo = files[file_index];
-				torrentGet_fileStats(map, file_fields, fileInfo);
-				torrentGet_files(map, file_fields, host, baseURL, download, fileInfo);
-
-				if (mapPerFile) {
-					hashAndAdd(map, file_list, listHCs, i);
-				} else {
-					if (hashAndAddAsCollection(map, file_list, listHCs, i) && !didFileKeys) {
-						mapParent.put("fileKeys", new ArrayList(map.keySet()));
-						didFileKeys = true;
-					}
-				}
-			}
-		}
-
-		return file_list;
-	}
-
-	private List<String> fastSplit(String s, char charSplitter) {
-		List<String> list = new ArrayList<>();
-
-		int pos = 0;
-
-		int len = s.length();
-		while (pos < len) {
-			int end = s.indexOf(charSplitter, pos);
-			if (end == -1) {
-				end = len;
-			}
-			String nextString = s.substring(pos, end);
-			pos = end + 1; // Skip the delimiter.
-			list.add(nextString);
-		}
-
-		return list;
-	}
-
-	private List getMapList(Map args, String key, char charSplitter, List def) {
-		Object oFilesHC = args.get(key);
-		if (oFilesHC instanceof String) {
-			return fastSplit((String) oFilesHC, charSplitter);
-		}
-		if (oFilesHC instanceof List) {
-			return (List) oFilesHC;
-		}
-		return def;
-	}
-
-	private void torrentGet_files(Map obj, List<String> sortedFields,
-			String host, String baseURL, Download download, DiskManagerFileInfo file) {
-		boolean all = sortedFields == null || sortedFields.size() == 0;
-		File realFile = null;
-		if (all
-				|| Collections.binarySearch(sortedFields,
-						FIELD_FILESTATS_BYTES_COMPLETED) >= 0) {
-			obj.put(FIELD_FILESTATS_BYTES_COMPLETED, file.getDownloaded()); // this must be a spec error...
-		}
-		if (all || Collections.binarySearch(sortedFields, FIELD_FILES_LENGTH) >= 0) {
-			obj.put(FIELD_FILES_LENGTH, file.getLength());
-		}
-		if (all || Collections.binarySearch(sortedFields, FIELD_FILES_NAME) >= 0) {
-			Torrent torrent = download.getTorrent();
-			boolean simpleTorrent = torrent == null ? false : torrent.isSimpleTorrent();
-			realFile = file.getFile(true);
-
-			if (simpleTorrent) {
-				obj.put(FIELD_FILES_NAME, realFile.getName());
-			} else {
-				String absolutePath = realFile.getAbsolutePath();
-				String savePath = download.getSavePath();
-				if (absolutePath.startsWith(savePath)) {
-					// TODO: .dnd_az parent..
-		    	//String dnd_sf = dm.getDownloadState().getAttribute( DownloadManagerState.AT_DND_SUBFOLDER );
-
-					// + 1 to remove the dir separator
-					obj.put(FIELD_FILES_NAME, absolutePath.substring(savePath.length() + 1));
-				} else {
-					obj.put(FIELD_FILES_NAME, absolutePath);
-				}
-			}
-		}
-
-		// Vuze specific, don't clutter transmission clients with these (they don't
-		// have sortedFields param)
-		if (sortedFields != null) {
-			boolean showAllVuze = sortedFields.size() == 0;
-
-			if (showAllVuze
-					|| Collections.binarySearch(sortedFields, FIELD_FILES_CONTENT_URL) >= 0) {
-				URL f_stream_url = PlayUtils.getMediaServerContentURL(file);
-				if (f_stream_url != null) {
-					String s = adjustURL(host, f_stream_url);
-					if (baseURL != null && s.startsWith(baseURL)) {
-						s = s.substring(baseURL.length(), s.length());
-					}
-					obj.put(FIELD_FILES_CONTENT_URL, s);
-				}
-			}
-
-			if (showAllVuze
-					|| Collections.binarySearch(sortedFields, FIELD_FILES_FULL_PATH) >= 0) {
-				if (realFile == null) {
-					realFile = file.getFile(true);
-				}
-				obj.put(FIELD_FILES_FULL_PATH, realFile.toString());
-			}
-		}
-		
-		if (realFile != null) {
-			synchronized (referenceKeeper) {
-				referenceKeeper.put(SystemTime.getCurrentTime(), realFile);
-			}
-		}
-	}
-
-	private Object torrentGet_files_stub(
-			String host,
-			DownloadStub download_stub,
-			long download_id,
-			List<String> file_fields,
-			Map args)
-	{
-		DownloadStubFile[] stubFiles = download_stub.getStubFiles();
-		
-		List<Map>	file_list = new ArrayList<>();
-
-		// Skip files that match these hashcodes
-		List listHCs = getMapList(args, "files-hc-" + download_id, ',', null);
-
-		int[] file_indexes = getFileIndexes(args, download_id);
-		
-		if (file_indexes == null || file_indexes.length == 0) {
-  		
-			for (int i = 0; i < stubFiles.length; i++) {
-				DownloadStubFile sf = stubFiles[i];
-  		
-				TreeMap	map = new TreeMap();
-  			
-				map.put(FIELD_FILES_INDEX, i);
-
-  			torrentGet_file_stub(map, file_fields, host, sf);
-  			if (file_fields != null && file_fields.size() > 0) {
-  				torrentGet_fileStats_stub(map, file_fields, sf);
-  			}
-
-  			hashAndAdd(map, file_list, listHCs, i);
-			}
-		} else {
-			for (int i = 0; i < file_indexes.length; i++) {
-				int file_index = file_indexes[i];
-				if (file_index < 0 || file_index >= stubFiles.length) {
-					continue;
-				}
-
-				TreeMap<String, Object> map = new TreeMap<>();
-
-				file_list.add(map);
-
-				map.put(FIELD_FILES_INDEX, file_index);
-				DownloadStubFile file = stubFiles[file_index];
-				torrentGet_fileStats_stub(map, file_fields, file);
-				torrentGet_file_stub(map, file_fields, host, file);
-
-  			hashAndAdd(map, file_list, listHCs, i);
-			}
-		}
-		
-		return file_list;				
-	}
-
-	private int[] getFileIndexes(Map args, long download_id) {
-		Object file_ids = args.get("file-indexes-" + download_id);
-		int[] file_indexes = null;
-		if (file_ids instanceof Number) {
-			file_indexes = new int[] {
-				((Number) file_ids).intValue()
-			};
-		} else if (file_ids instanceof List) {
-			List listFileIDs = (List) file_ids;
-			file_indexes = new int[listFileIDs.size()];
-			for (int i = 0; i < listFileIDs.size(); i++) {
-				Object o = listFileIDs.get(i);
-				if (o instanceof Number) {
-					file_indexes[i] = ((Number) o).intValue();
-				}
-			}
-		}
-		return file_indexes;
-	}
-
-	private void torrentGet_file_stub(Map map,List<String> sortedFields, String host, DownloadStubFile sf) {
-		long len = sf.getLength();
-
-		long downloaded;
-
-		if (len < 0) {
-
-			downloaded = 0;
-			len = -len;
-
-		} else {
-
-			downloaded = len;
-		}
-
-		boolean all = sortedFields == null || sortedFields.size() == 0;
-
-		if (all
-				|| Collections.binarySearch(sortedFields,
-						FIELD_FILESTATS_BYTES_COMPLETED) >= 0) {
-			map.put(FIELD_FILESTATS_BYTES_COMPLETED, downloaded); // this must be a spec error...
-		}
-		if (all || Collections.binarySearch(sortedFields, FIELD_FILES_LENGTH) >= 0) {
-			map.put(FIELD_FILES_LENGTH, len);
-		}
-		if (all || Collections.binarySearch(sortedFields, FIELD_FILES_NAME) >= 0) {
-			map.put(FIELD_FILES_NAME, sf.getFile().getName());
-		}
-		if (sortedFields != null
-				&& Collections.binarySearch(sortedFields, FIELD_FILES_FULL_PATH) >= 0) {
-			map.put(FIELD_FILES_FULL_PATH, sf.getFile().toString());
-		}
-	}
-
-	private Object torrentGet_errorString(DownloadManager core_download,
-			Download download) {
-		Object value;
-
-		String str = download.getErrorStateDetails();
-		
-		if ( str != null && str.length() > 0 ){
-			value = str;
-		}else{
-			value = "";
-			TRTrackerAnnouncer tracker_client = core_download.getTrackerClient();
-			
-			if ( tracker_client != null ){
-				TRTrackerAnnouncerResponse x = tracker_client.getBestAnnouncer().getLastResponse();
-				if ( x != null ){
-					if ( x.getStatus() == TRTrackerAnnouncerResponse.ST_REPORTED_ERROR ){
-						value = x.getStatusString();
-					}
-				}
-			}else{
-				DownloadScrapeResult x = download.getLastScrapeResult();
-				if ( x != null ){
-					if ( x.getResponseType() == DownloadScrapeResult.RT_ERROR ){
-						value = x.getStatus();
-					}
-				}
-			}
-		}
-		return value;
-	}
-
-	/** Defines what kind of text is in errorString. TR_STAT_* */
-	private Object torrentGet_error(DownloadManager core_download, Download download) {
-		Object value;
-		/** Defines what kind of text is in errorString. */
-		String str = download.getErrorStateDetails();
-		
-		if ( str != null && str.length() > 0 ){
-			value = TR_STAT_LOCAL_ERROR;
-		}else{
-			value = 0;
-			TRTrackerAnnouncer tracker_client = core_download.getTrackerClient();
-			
-			if ( tracker_client != null ){
-				TRTrackerAnnouncerResponse x = tracker_client.getBestAnnouncer().getLastResponse();
-				if ( x != null ){
-					if ( x.getStatus() == TRTrackerAnnouncerResponse.ST_REPORTED_ERROR ){
-						value = TR_STAT_TRACKER_ERROR;
-					}
-				}
-			}else{
-				DownloadScrapeResult x = download.getLastScrapeResult();
-				if ( x != null ){
-					if ( x.getResponseType() == DownloadScrapeResult.RT_ERROR ){
-						String status = x.getStatus();
-						
-						if ( status != null && status.length() > 0 ){
-						
-							value = TR_STAT_TRACKER_ERROR;
-						}
-					}
-				}
-			}
-		}
-		return value;
-	}
-
-	/** 
-	 * The last time we uploaded or downloaded piece data on this torrent. 
-	 */
-	private Object torrentGet_activityDate(DownloadManager download, boolean relative) {
-		int state = download.getState();
-		if (state == DownloadManager.STATE_SEEDING || state == DownloadManager.STATE_DOWNLOADING) {
-			int r = download.getStats().getTimeSinceLastDataReceivedInSeconds();
-			int s = download.getStats().getTimeSinceLastDataSentInSeconds();
-			long l;
-			if (r > 0 && s > 0) {
-				l = Math.min(r, s);
-			} else if (r < 0) {
-				l = s;
-			} else {
-				l = r;
-			}
-			if (relative) {
-				return -l;
-			}
-			return (SystemTime.getCurrentTime() / 1000) - l;
-		}
-
-		DownloadManagerState downloadState = download.getDownloadState();
-		long timestamp = downloadState.getLongParameter(DownloadManagerState.PARAM_DOWNLOAD_LAST_ACTIVE_TIME);
-		if (timestamp != 0) {
-			return timestamp / 1000;
-		}
-
-		timestamp = downloadState.getLongParameter(DownloadManagerState.PARAM_DOWNLOAD_COMPLETED_TIME);
-		if (timestamp != 0) {
-			return timestamp / 1000;
-		}
-
-		timestamp = downloadState.getLongParameter(DownloadManagerState.PARAM_DOWNLOAD_ADDED_TIME);
-		if (timestamp != 0) {
-			return timestamp / 1000;
-		}
-
-		return 0;
-	}
-
-	/** 
-	 * True if the torrent is running, but has been idle for long enough
-	 * to be considered stalled.
-	 */
-	private Object torrentGet_isStalled(Download download) {
-		Object value = false;
-		int state = download.getState();
-		if (state == Download.ST_SEEDING || state == Download.ST_DOWNLOADING) {
-    	DefaultRankCalculator calc = StartStopRulesDefaultPlugin.getRankCalculator(download);
-    	if (calc != null) {
-				value = (state == Download.ST_SEEDING && !calc.getActivelySeeding())
-						|| (state == Download.ST_DOWNLOADING && !calc.getActivelyDownloading());
-    	}
-		}
-		return value;
-	}
-
-	private List torrentGet_peers(DownloadManager core_download) {
-  	// peers              | array of objects, each containing:   |
-  	// +-------------------------+------------+
-  	// | address                 | string     | tr_peer_stat | x
-  	// | clientName              | string     | tr_peer_stat | x
-  	// | clientIsChoked          | boolean    | tr_peer_stat | x
-  	// | clientIsInterested      | boolean    | tr_peer_stat | x
-  	// | flagStr                 | string     | tr_peer_stat | partial
-  	// | isDownloadingFrom       | boolean    | tr_peer_stat | x
-  	// | isEncrypted             | boolean    | tr_peer_stat | ?
-  	// | isIncoming              | boolean    | tr_peer_stat | x
-  	// | isUploadingTo           | boolean    | tr_peer_stat | x
-  	// | isUTP                   | boolean    | tr_peer_stat | x
-  	// | peerIsChoked            | boolean    | tr_peer_stat | x
-  	// | peerIsInterested        | boolean    | tr_peer_stat | x
-  	// | port                    | number     | tr_peer_stat | x
-  	// | progress                | double     | tr_peer_stat | x
-  	// | rateToClient (B/s)      | number     | tr_peer_stat | x
-  	// | rateToPeer (B/s)        | number     | tr_peer_stat | x
-
-		List peers = new ArrayList();
-		
-		if (core_download == null) {
-			return peers;
-		}
-		
-		PEPeerManager pm = core_download.getPeerManager();
-		if (pm == null) {
-			return peers;
-		}
-		List<PEPeer> peerList = pm.getPeers();
-		for (PEPeer peer : peerList) {
-			Map map = new HashMap();
-			peers.add(map);
-
-			final PEPeerStats stats = peer.getStats();
-			boolean isDownloadingFrom = peer.isDownloadPossible() && stats.getDataReceiveRate() > 0;
-			// TODO FIX
-			// peer.connection.getTransport().isEncrypted
-			String encryption = peer.getEncryption();
-			boolean isEncrypted = encryption != null && !encryption.startsWith("None") && !encryption.startsWith("Plain") ;
-			boolean isUTP = peer.getProtocol().equals("uTP");
-			boolean isUploadingTo = stats.getDataSendRate() > 0;
-
-			map.put(FIELD_PEERS_ADDRESS, peer.getIp());
-			map.put(FIELD_PEERS_CLIENT_NAME, peer.getClient());
-			map.put(FIELD_PEERS_CLIENT_CHOKED, peer.isChokedByMe());
-			map.put(FIELD_PEERS_CLIENT_INTERESTED, peer.isInterested());
-
-			map.put("state", peer.getPeerState());
-
-			// flagStr
-      // "O": "Optimistic unchoke"
-      // +"D": "Downloading from this peer"
-      // +"d": "We would download from this peer if they'd let us"
-      // +"U": "Uploading to peer"
-      // "u": "We would upload to this peer if they'd ask"
-      // +"K": "Peer has unchoked us, but we're not interested"
-      // +"?": "We unchoked this peer, but they're not interested"
-      // +"E": "Encrypted Connection"
-      // +"H": "Peer was discovered through Distributed Hash Table (DHT)"
-      // +"X": "Peer was discovered through Peer Exchange (PEX)"
-      // +"I": "Peer is an incoming connection"
-      // +"T": "Peer is connected via uTP"
-			//TODO
-			StringBuffer flagStr = new StringBuffer();
-
-			if (isDownloadingFrom) {
-				flagStr.append('D');
-			} else if (peer.isDownloadPossible()) {
-				flagStr.append("d");
-			}
-			if (isUploadingTo) {
-				flagStr.append("U");
-			}
-			if (!peer.isChokingMe() && !peer.isInteresting()) {
-				flagStr.append("K");
-			}
-			if (!peer.isChokedByMe() && !peer.isInterested()) {
-				flagStr.append("?");
-			}
-			if (isEncrypted) {
-				flagStr.append("E");
-			}
-			String source = peer.getPeerSource();
-			switch (source) {
-				case PEPeerSource.PS_DHT:
-					flagStr.append('H');
-					break;
-				case PEPeerSource.PS_OTHER_PEER:
-					flagStr.append('X');
-					break;
-				case PEPeerSource.PS_BT_TRACKER :
-					flagStr.append('I');
-					break;
-			}
-			if (isUTP) {
-				flagStr.append("T");
-			}
-
-			map.put(FIELD_PEERS_FLAGSTR, flagStr.toString());
-
-			// code, name
-			String[] countryDetails = PeerUtils.getCountryDetails(peer);
-			if (countryDetails != null && countryDetails.length > 0) {
-				map.put("cc", countryDetails[0]);
-			}
-			
-			map.put(FIELD_PEERS_IS_DLING_FROM, isDownloadingFrom);
-			map.put(FIELD_PEERS_IS_ENCRYPTED, isEncrypted);
-			map.put(FIELD_PEERS_IS_INCOMING, peer.isIncoming());
-			map.put(FIELD_PEERS_IS_ULING_TO, isUploadingTo);
-			// RPC v13
-			map.put(FIELD_PEERS_IS_UTP, isUTP);
-			map.put(FIELD_PEERS_PEER_CHOKED, peer.isChokingMe());
-			map.put(FIELD_PEERS_PEER_INTERESTED, peer.isInteresting());
-			// RPC v3
-			map.put(FIELD_PEERS_PORT, peer.getPort());
-			map.put(FIELD_PEERS_PROGRESS, peer.getPercentDoneInThousandNotation() / 1000.0);
-			map.put(FIELD_PEERS_RATE_TO_CLIENT_BPS, stats.getDataReceiveRate());
-			map.put(FIELD_PEERS_RATE_TO_PEER_BPS, stats.getDataSendRate());
-		}
-		
-		return peers;
-	}
 
 	protected List<DownloadStub>
 	getAllDownloads(
@@ -6707,7 +4184,7 @@ XMWebUIPlugin
 			
 			synchronized( magnet_downloads ){
 				
-				downloads3 = magnet_downloads.toArray( new MagnetDownload[magnet_downloads.size()]);
+				downloads3 = magnet_downloads.toArray(new MagnetDownload[0]);
 			}
 		}else{
 			
@@ -6835,27 +4312,17 @@ XMWebUIPlugin
 			}
 		}
 		
-		Collections.sort(
-			downloads,
-			new Comparator<DownloadStub>()
-			{
-				@Override
-				public int
-				compare(
-					DownloadStub arg0, 
-					DownloadStub arg1 )
-				{
-					long res = getID( arg0, true ) - getID( arg1, true );
-					
-					if ( res < 0 ){
-						return( -1 );
-					}else if ( res > 0 ){
-						return( 1 );
-					}else{
-						return( 0 );
-					}
-				}		
-			});
+		Collections.sort(downloads, (arg0, arg1) -> {
+			long res = getID(arg0, true) - getID(arg1, true);
+
+			if (res < 0) {
+				return (-1);
+			} else if (res > 0) {
+				return (1);
+			} else {
+				return (0);
+			}
+		});
 		
 		return( downloads );
 	}
@@ -6867,7 +4334,7 @@ XMWebUIPlugin
 	{
 		List<DownloadStub> downloads = getDownloads(ids,false);
 		
-		ArrayList<DownloadManager> list = new ArrayList<>(downloads.size());
+		List<DownloadManager> list = new ArrayList<>(downloads.size());
 
 		for ( DownloadStub downloadStub: downloads ){
 			
@@ -6889,7 +4356,7 @@ XMWebUIPlugin
 		return list;
 	}
 
-	protected List
+	protected static List
 	getList(
 		Object	o )
 	{
@@ -6900,14 +4367,14 @@ XMWebUIPlugin
 		}
 	}
 	
-	protected boolean
+	protected static boolean
 	getBoolean(
 		Object	o )
 	{
 		return getBoolean(o, false);
 	}
 
-	protected Boolean
+	protected static Boolean
 	getBoolean(
 		Object	o,
 		Boolean defaultVal )
@@ -6930,7 +4397,7 @@ XMWebUIPlugin
 		}
 	}
 	
-	protected long
+	long
 	getID(
 		DownloadStub		download_stub,
 		boolean				allocate_if_new )
@@ -6943,7 +4410,7 @@ XMWebUIPlugin
 				
 				List<DownloadStub> all_downloads = getAllDownloads( true );
 
-				Set<Long>	all_ids = new HashSet<>();
+				Collection<Long> all_ids = new HashSet<>();
 				
 				List<DownloadStub>	dups = new ArrayList<>();
 				
@@ -7012,7 +4479,7 @@ XMWebUIPlugin
 		return( id );
 	}
 	
-	private String
+	private static String
 	getAZMode()
 	{
 		return "trial";
@@ -7062,7 +4529,7 @@ XMWebUIPlugin
 				}
 									
 	
-				DiskManagerFileInfo file = null;
+				DiskManagerFileInfo file;
 				
 				try{
 					file = PluginCoreUtils.wrap(dm.getDownloadState().getPrimaryFile());
@@ -7081,7 +4548,7 @@ XMWebUIPlugin
 
 				if ( stream_url != null ){
 					
-					torrent.put( "contentURL", adjustURL( host, stream_url ));
+					torrent.put(FIELD_FILES_CONTENT_URL, StaticUtils.adjustURL( host, stream_url ));
 				}
 				
 				TOTorrent to_torrent = dm.getTorrent();
@@ -7107,7 +4574,7 @@ XMWebUIPlugin
 				
 				if ( requested_files != null ){
 					
-					List<Map> file_info = new ArrayList<Map>();
+					List<Map> file_info = new ArrayList<>();
 						
 					torrent.put( "files", file_info );
 					
@@ -7127,7 +4594,7 @@ XMWebUIPlugin
 
 							if ( f_stream_url != null ){
 								
-								f_map.put( "contentURL", adjustURL( host, f_stream_url ));
+								f_map.put(FIELD_FILES_CONTENT_URL, StaticUtils.adjustURL( host, f_stream_url ));
 							}
 						}
 					}else{
@@ -7150,7 +4617,7 @@ XMWebUIPlugin
 
 								if ( f_stream_url != null ){
 									
-									f_map.put( "contentURL", adjustURL( host, f_stream_url ));
+									f_map.put(FIELD_FILES_CONTENT_URL, StaticUtils.adjustURL( host, f_stream_url ));
 								}
 							}
 						}
@@ -7165,7 +4632,7 @@ XMWebUIPlugin
 	
 	private static final int RT_THUMBNAIL	= 0;
 	
-	private String
+	private static String
 	getThumbnailResourceURL(
 		long	id )
 	{
@@ -7215,7 +4682,7 @@ XMWebUIPlugin
 
 			}catch( Throwable e ){
 				
-				throw( new IOException( "Failed to get thumbnail: " + getCausesMesssages( e )));
+				throw( new IOException( "Failed to get thumbnail: " + StaticUtils.getCausesMesssages( e )));
 			}
 			
 			return( true );
@@ -7225,27 +4692,7 @@ XMWebUIPlugin
 			throw( new IOException( "Unknown resource type: " + type ));
 		}
 	}
-	
-	private String
-	adjustURL(
-		String		host,
-		URL			url )
-	{
-		if ( host == null || host.length() == 0 ){
-			
-			return( url.toExternalForm());
-		}
-		
-		int	pos = host.indexOf( ':' );
-		
-		if ( pos != -1 ){
-		
-			host = host.substring( 0, pos ).trim();
-		}
-		
-		return( UrlUtils.setHost( url, host ).toExternalForm());
-	}
-	
+
 	private void
 	processVuzeLifecycle(
 		Map<String,Object>	args,
@@ -7263,95 +4710,94 @@ XMWebUIPlugin
 		}
 		
 		try{
-			if ( cmd.equals( "status" )){
-				
-				synchronized( lifecycle_lock ){
-				
-					result.put( "state", lifecycle_state );
-				}
-				
-			}else if ( cmd.equals( "close" )){
-				
-				synchronized( lifecycle_lock ){
-				
-					if ( lifecycle_state < 2 ){
-					
-						lifecycle_state	= 2;
-						
-					}else{
-						
-						return;
-					}
-				}
-				
-				PluginManager.stopClient();
-				
-			}else if ( cmd.equals( "restart" )){
-				
-				synchronized( lifecycle_lock ){
-					
-					if ( lifecycle_state < 2 ){
-					
-						lifecycle_state	= 3;
-						
-					}else{
-						
-						return;
-					}
-				}
-								
-				PluginManager.restartClient();
-				
-			}else if ( cmd.equals( "update-check" )){
-				
-				synchronized( lifecycle_lock ){
+			switch (cmd) {
+				case "status":
 
-					if ( lifecycle_state != 1 ){
-						
-						throw( new IOException( "update check can't currently be performed" ));
+					synchronized (lifecycle_lock) {
+
+						result.put("state", lifecycle_state);
 					}
-					
-					if ( update_in_progress ){
-						
-						throw( new IOException( "update operation in progress" ));
+
+					break;
+				case "close":
+
+					synchronized (lifecycle_lock) {
+
+						if (lifecycle_state < 2) {
+
+							lifecycle_state = 2;
+
+						} else {
+
+							return;
+						}
 					}
-					
-					update_in_progress = true;
-				}
-				
-				try{
-					UpdateManager update_manager = plugin_interface.getUpdateManager();
-					
-					final UpdateCheckInstance	checker = update_manager.createUpdateCheckInstance();
-					
-					final List<String>	l_updates = new ArrayList<String>();
-					
-					final AESemaphore sem = new AESemaphore( "uc-wait" );
-					
-					checker.addListener(
-						new UpdateCheckInstanceListener()
-						{
-							@Override
-							public void
-							cancelled(
-								UpdateCheckInstance		instance )
-							{
-								sem.release();
-							}
-							
-							@Override
-							public void
-							complete(
-								UpdateCheckInstance		instance )
-							{		
-								try{
-									Update[] 	updates = instance.getUpdates();
-									
-									for (int i=0;i<updates.length;i++){
-										
-										Update	update = updates[i];
-																			
-										l_updates.add( "Update available for '" + update.getName() + "', new version = " + update.getNewVersion());
+
+					PluginManager.stopClient();
+
+					break;
+				case "restart":
+
+					synchronized (lifecycle_lock) {
+
+						if (lifecycle_state < 2) {
+
+							lifecycle_state = 3;
+
+						} else {
+
+							return;
+						}
+					}
+
+					PluginManager.restartClient();
+
+					break;
+				case "update-check":
+
+					synchronized (lifecycle_lock) {
+
+						if (lifecycle_state != 1) {
+
+							throw (new IOException("update check can't currently be performed"));
+						}
+
+						if (update_in_progress) {
+
+							throw (new IOException("update operation in progress"));
+						}
+
+						update_in_progress = true;
+					}
+
+					try {
+						UpdateManager update_manager = plugin_interface.getUpdateManager();
+
+						final UpdateCheckInstance checker = update_manager.createUpdateCheckInstance();
+
+						final List<String> l_updates = new ArrayList<>();
+
+						final AESemaphore sem = new AESemaphore("uc-wait");
+
+						checker.addListener(
+								new UpdateCheckInstanceListener() {
+									@Override
+									public void
+									cancelled(
+											UpdateCheckInstance instance) {
+										sem.release();
+									}
+
+									@Override
+									public void
+									complete(
+											UpdateCheckInstance instance) {
+										try {
+											Update[] updates = instance.getUpdates();
+
+											for (Update update : updates) {
+												
+												l_updates.add("Update available for '" + update.getName() + "', new version = " + update.getNewVersion());
 												
 										/*
 										String[]	descs = update.getDescription();
@@ -7366,171 +4812,167 @@ XMWebUIPlugin
 											out.println( "**** This is a mandatory update, other updates can not proceed until this is performed ****" );
 										}
 										*/
-									}
-									
-										// need to cancel this otherwise it sits there blocking other installer operations
-									
-									checker.cancel();
-									
-								}finally{
-									
-									sem.release();
-								}
-							}
-						});
-					
-					checker.start();
-					
-					sem.reserve();
-					
-					result.put( "updates", l_updates );
-				
-				}finally{
-					
-					synchronized( lifecycle_lock ){
-						
-						update_in_progress = false;
-					}
-				}
-			}else if ( cmd.equals( "update-apply" )){
-				
-				synchronized( lifecycle_lock ){
-
-					if ( lifecycle_state != 1 ){
-						
-						throw( new IOException( "update check can't currently be performed" ));
-					}
-					
-					if ( update_in_progress ){
-						
-						throw( new IOException( "update operation in progress" ));
-					}
-					
-					update_in_progress = true;
-				}
-				
-				try{
-					UpdateManager update_manager = plugin_interface.getUpdateManager();
-					
-					final UpdateCheckInstance	checker = update_manager.createUpdateCheckInstance();
-					
-					final AESemaphore sem = new AESemaphore( "uc-wait" );
-	
-					final Throwable[] 	error 		= { null };
-					final boolean[]		restarting 	= { false };
-					
-					checker.addListener(
-						new UpdateCheckInstanceListener()
-						{
-							@Override
-							public void
-							cancelled(
-								UpdateCheckInstance		instance )
-							{
-								sem.release();
-							}
-							
-							@Override
-							public void
-							complete(
-								UpdateCheckInstance		instance )
-							{
-								Update[] 	updates = instance.getUpdates();
-														
-								try{
-			
-									for ( Update update: updates ){
-										
-										for ( ResourceDownloader rd: update.getDownloaders()){
-											
-											rd.addListener(
-				 								new ResourceDownloaderAdapter()
-				 								{
-				 									@Override
-												  public void
-				 									reportActivity(
-				 										ResourceDownloader	downloader,
-				 										String				activity )
-				 									{	
-				 									}
-				 									
-				 									@Override
-												  public void
-				 									reportPercentComplete(
-				 										ResourceDownloader	downloader,
-				 										int					percentage )
-				 									{			 												
-				 									}
-				 								});
-											
-											rd.download();
-										}
-									}
-									
-									boolean	restart_required = false;
-									
-									for (int i=0;i<updates.length;i++){
-	
-										if ( updates[i].getRestartRequired() == Update.RESTART_REQUIRED_YES ){
-											
-											restart_required = true;
-										}
-									}
-									
-									if ( restart_required ){
-										
-										synchronized( lifecycle_lock ){
-											
-											if ( lifecycle_state < 2 ){
-										
-												lifecycle_state	= 3;
-												
-											}else{
-												
-												return;
 											}
+
+											// need to cancel this otherwise it sits there blocking other installer operations
+
+											checker.cancel();
+
+										} finally {
+
+											sem.release();
 										}
-										
-										PluginManager.restartClient();
-										
-										restarting[0] = true;
 									}
-								}catch( Throwable e ){
-									
-									error[0] = e;
-									
-								}finally{
-									
-									sem.release();
-								}
-							}
-						});
-					
-					checker.start();
-					
-					sem.reserve();
-	
-					if ( error[0] != null ){
-						
-						throw( new IOException( "Failed to apply updates: " + getCausesMesssages( error[0] )));
+								});
+
+						checker.start();
+
+						sem.reserve();
+
+						result.put("updates", l_updates);
+
+					} finally {
+
+						synchronized (lifecycle_lock) {
+
+							update_in_progress = false;
+						}
 					}
-					
-					result.put( "restarting", restarting[0] );
-					
-				}finally{
-					
-					synchronized( lifecycle_lock ){
-						
-						update_in_progress = false;
+					break;
+				case "update-apply":
+
+					synchronized (lifecycle_lock) {
+
+						if (lifecycle_state != 1) {
+
+							throw (new IOException("update check can't currently be performed"));
+						}
+
+						if (update_in_progress) {
+
+							throw (new IOException("update operation in progress"));
+						}
+
+						update_in_progress = true;
 					}
-				}
-			}else{
-				
-				throw( new IOException( "Unknown cmd: " + cmd ));
+
+					try {
+						UpdateManager update_manager = plugin_interface.getUpdateManager();
+
+						final UpdateCheckInstance checker = update_manager.createUpdateCheckInstance();
+
+						final AESemaphore sem = new AESemaphore("uc-wait");
+
+						final Throwable[] error = {null};
+						final boolean[] restarting = {false};
+
+						checker.addListener(
+								new UpdateCheckInstanceListener() {
+									@Override
+									public void
+									cancelled(
+											UpdateCheckInstance instance) {
+										sem.release();
+									}
+
+									@Override
+									public void
+									complete(
+											UpdateCheckInstance instance) {
+										Update[] updates = instance.getUpdates();
+
+										try {
+
+											for (Update update : updates) {
+
+												for (ResourceDownloader rd : update.getDownloaders()) {
+
+													rd.addListener(
+															new ResourceDownloaderAdapter() {
+																@Override
+																public void
+																reportActivity(
+																		ResourceDownloader downloader,
+																		String activity) {
+																}
+
+																@Override
+																public void
+																reportPercentComplete(
+																		ResourceDownloader downloader,
+																		int percentage) {
+																}
+															});
+
+													rd.download();
+												}
+											}
+
+											boolean restart_required = false;
+
+											for (Update update : updates) {
+
+												if (update.getRestartRequired() == Update.RESTART_REQUIRED_YES) {
+
+													restart_required = true;
+												}
+											}
+
+											if (restart_required) {
+
+												synchronized (lifecycle_lock) {
+
+													if (lifecycle_state < 2) {
+
+														lifecycle_state = 3;
+
+													} else {
+
+														return;
+													}
+												}
+
+												PluginManager.restartClient();
+
+												restarting[0] = true;
+											}
+										} catch (Throwable e) {
+
+											error[0] = e;
+
+										} finally {
+
+											sem.release();
+										}
+									}
+								});
+
+						checker.start();
+
+						sem.reserve();
+
+						if (error[0] != null) {
+
+							throw (new IOException("Failed to apply updates: " + StaticUtils.getCausesMesssages(error[0])));
+						}
+
+						result.put("restarting", restarting[0]);
+
+					} finally {
+
+						synchronized (lifecycle_lock) {
+
+							update_in_progress = false;
+						}
+					}
+					break;
+				default:
+
+					throw (new IOException("Unknown cmd: " + cmd));
 			}
 		}catch( PluginException e ){
 			
-			throw( new IOException( "Lifecycle command failed: " + getCausesMesssages(e)));
+			throw( new IOException( "Lifecycle command failed: " + StaticUtils.getCausesMesssages(e)));
 		}
 	}
 	
@@ -7542,540 +4984,95 @@ XMWebUIPlugin
 		throws IOException
 	{
 		checkUpdatePermissions();
-				
-		try{
-			String	cmd = (String)args.get( "cmd" );
-			
-			if ( cmd == null ){
-				
-				throw( new IOException( "cmd missing" ));
-			}
-			
-			PairingManager pm = PairingManagerFactory.getSingleton();
 
-			if ( cmd.equals( "status" )){
-				
-				result.put( "status",  pm.getStatus());
-				
+		String	cmd = (String)args.get( "cmd" );
+
+		if ( cmd == null ){
+			
+			throw( new IOException( "cmd missing" ));
+		}
+
+		PairingManager pm = PairingManagerFactory.getSingleton();
+
+		switch (cmd) {
+			case "status": {
+
+				result.put("status", pm.getStatus());
+
 				boolean enabled = pm.isEnabled();
-				
-				result.put( "enabled", enabled );
-				
-				if ( enabled ){
-				
-					result.put( "access_code", pm.peekAccessCode());
+
+				result.put("enabled", enabled);
+
+				if (enabled) {
+
+					result.put("access_code", pm.peekAccessCode());
 				}
-				
+
 				boolean srp_enabled = pm.isSRPEnabled();
-				
-				result.put( "srp_enabled", srp_enabled );
-				
-				if ( srp_enabled ){
-					
-					result.put( "srp_status", pm.getSRPStatus());
+
+				result.put("srp_enabled", srp_enabled);
+
+				if (srp_enabled) {
+
+					result.put("srp_status", pm.getSRPStatus());
 				}
-			}else if ( cmd.equals( "set-enabled" )){
-				
-				boolean	enabled = (Boolean)args.get( "enabled" );
-				
-				if ( enabled != pm.isEnabled()){
-					
-					pm.setEnabled( enabled );
+				break;
+			}
+			case "set-enabled": {
+
+				boolean enabled = (Boolean) args.get("enabled");
+
+				if (enabled != pm.isEnabled()) {
+
+					pm.setEnabled(enabled);
 				}
-			}else if ( cmd.equals( "set-srp-enabled" )){
-				
-				boolean	enabled = (Boolean)args.get( "enabled" );
-				
-				if ( enabled != pm.isSRPEnabled()){
-					
-					if ( enabled ){
-						
-						String	pw = (String)args.get( "password" );
-						
-						if ( pw == null ){
-							
-							throw( new IOException( "Password required when enabling SRP" ));
+				break;
+			}
+			case "set-srp-enabled": {
+
+				boolean enabled = (Boolean) args.get("enabled");
+
+				if (enabled != pm.isSRPEnabled()) {
+
+					if (enabled) {
+
+						String pw = (String) args.get("password");
+
+						if (pw == null) {
+
+							throw (new IOException("Password required when enabling SRP"));
 						}
-						
-						pm.setSRPEnabled( true );
-						
-						pm.setSRPPassword( pw.toCharArray());
-						
-					}else{
-					
-						pm.setSRPEnabled( false );
+
+						pm.setSRPEnabled(true);
+
+						pm.setSRPPassword(pw.toCharArray());
+
+					} else {
+
+						pm.setSRPEnabled(false);
 					}
 				}
-			}else{
-				
-				throw( new IOException( "Unknown cmd: " + cmd ));
+				break;
 			}
-		}catch( IOException e ){
-			
-			throw( e );
+			default:
+
+				throw (new IOException("Unknown cmd: " + cmd));
 		}
 	}
 	
-	protected class
+	protected static class
 	PermissionDeniedException
 		extends IOException
 	{
 		private static final long serialVersionUID = -344396020759893604L;		
 	}
-	
-	protected String
-	escapeXML(
-		String	str )
-	{
-		if ( str == null ){
-			
-			return( "" );
-			
-		}
-		str = str.replaceAll( "&", "&amp;" );
-		str = str.replaceAll( ">", "&gt;" );
-		str = str.replaceAll( "<", "&lt;" );
-		str = str.replaceAll( "\"", "&quot;" );
-		str = str.replaceAll( "--", "&#45;&#45;" );
-		
-		return( str );
-	}
-	
+
 	private Number getTrackerID(TrackerPeerSource source) {
-		return Long.valueOf((source.getName().hashCode() << 4l) + source.getType());
-	}
-
-	// Copy of RelatedContentManager.getURLList, except with Torrent (not TOTorrent)
-	protected List
-	getURLList(
-		Torrent	torrent,
-		String		key )
-	{
-		Object obj = torrent.getAdditionalProperty( key );
-		
-		if ( obj instanceof byte[] ){
-			
-            List l = new ArrayList();
-            
-	        l.add(obj);
-	        
-	        return( l );
-	        
-		}else if ( obj instanceof List ){
-			
-			return (List)BEncoder.clone(obj);
-			
-		}else{
-			
-			return( new ArrayList());
-		}
-	}
-
-	private void hashAndAdd(SortedMap map, List<Map> addToList, List hcMatchList,
-			int i) {
-		long hashCode = longHashSimpleMap(map);
-		// hex string shorter than long in json, even with quotes
-		// Long.toString(hashCode) = Up to 19
-		// Long.toHexString(hashCode) = Up to 16 + 2 = 18
-		// Base64.encode(ByteFormatter.longToByteArray(hashCode)) = 8 bytes, 12 chars + 2 = 14
-		// encodeNumber(hashCode) = up to 12
-		String hc = encodeNumber(hashCode);
-		
-		boolean remove = hcMatchList != null && i < hcMatchList.size()
-				&& hc.equals(hcMatchList.get(i));
-		if (!remove) {
-			map.put("hc", hc);
-			addToList.add(map);
-		}
-	}
-
-	private static final char[] encodingTable = {
-			'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 
-			'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z',
-			'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 
-			'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z',
-			'0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '+', '/'
-	};
-
-	static String encodeNumber(long x) {
-		char[] buf = new char[12];
-		int p = buf.length;
-		boolean isNeg = x < 0;
-		if (isNeg) {
-			x = x * -1;
-		}
-		do {
-			int idx = (byte) ((x & 0xff) % 64);
-			buf[--p] = encodingTable[idx];
-			x >>>= 6;
-		} while (x != 0);
-		if (isNeg) {
-			buf[--p] = '-';
-		}
-		return new String(buf, p, buf.length - p);
-	}
-
-
-	private boolean hashAndAddAsCollection(SortedMap map, List<Collection> addToList, List hcMatchList,
-	                        int i) {
-		long hashCode = longHashSimpleMap(map);
-		String hc = encodeNumber(hashCode);
-
-		boolean remove = hcMatchList != null && i < hcMatchList.size()
-				&& hc.equals(hcMatchList.get(i));
-		if (!remove) {
-			map.put("hc", hc);
-			addToList.add(new ArrayList( map.values()));
-			return true;
-		}
-		return false;
-	}
-
-	/**
-	 * Very simple 64 bit hash of a map's keys (assumed String, esp on JSON map),
-	 * and values (JSON types -- String, Number, Map (object), List (array), Boolean.
-	 */
-	private long longHashSimpleMap(SortedMap<?, ?> map) {
-		long hash = 0;
-		
-		Object hc = map.get("hc");
-		if (hc instanceof String) {
-			return Long.parseLong((String) hc, 16);
-		}
-
-		for (Object key : map.keySet()) {
-			Object value = map.get(key);
-			hash = (hash * 31) + hash(key.toString());
-			if (value instanceof String) {
-				hash = (hash * 31) + hash((String) value);
-			} else if (value instanceof Number) {
-				// not sure about this
-				hash = (hash * 31) + ((Number) value).hashCode();
-			} else if (value instanceof SortedMap) {
-				hash = (hash * 31) + longHashSimpleMap((SortedMap) value);
-			} else if (value instanceof Collection) {
-				hash = (hash * 31) + longHashSimpleList((List) value);
-			} else if (value instanceof Boolean) {
-				hash = (hash * 31) + ((Boolean) value ? 1231 : 1237);
-			} else {
-				// else skip all other values since we can't be sure how they hash
-				//System.out.println("Warning: Unhashed Value. key '" + key + "' Value: " + value);
-			}
-		}
-		return hash;
-	}
-
-	private long longHashSimpleList(Collection<?> list) {
-		long hash = 0;
-		for (Object value : list) {
-			if (value instanceof String) {
-				hash = (hash * 31) + hash((String) value);
-			} else if (value instanceof Number) {
-				// not sure about this
-				hash = (hash * 31) + ((Number) value).hashCode();
-			} else if (value instanceof SortedMap) {
-				hash = (hash * 31) + longHashSimpleMap((SortedMap) value);
-			} else if (value instanceof Collection) {
-				hash = (hash * 31) + longHashSimpleList((Collection) value);
-			} else if (value instanceof Boolean) {
-				hash = (hash * 31) + ((Boolean) value ? 1231 : 1237);
-			} // else skip all other values since we can't be sure how they hash
-		}
-		return hash;
-	}
-
-	public static long hash(String string) {
-		// Use simpler hashCode as Java caches it
-		return string.hashCode();
-// FROM http://stackoverflow.com/questions/1660501/what-is-a-good-64bit-hash-function-in-java-for-textual-strings
-//adapted from String.hashCode()
-//		long h = 1125899906842597L; // prime
-//		int len = string.length();
-//
-//		for (int i = 0; i < len; i++) {
-//			h = 31 * h + string.charAt(i);
-//		}
-//		return h;
+		return (long) ((source.getName().hashCode() << 4L) + source.getType());
 	}
 
 	//////////////////////////////////////////////////////////////////////////////
-	
-	private class
-	RecentlyRemovedData
-	{
-		private final long			id;
-		private final long			create_time = SystemTime.getMonotonousTime();
-		//private final Set<String>	sessions = new HashSet<String>();
-		
-		private
-		RecentlyRemovedData(
-			long		_id )
-		{
-			id	= _id;
-		}
-		
-		private long
-		getID()
-		{
-			return( id );
-		}
-		
-		private long
-		getCreateTime()
-		{
-			return( create_time );
-		}
-		
-		private boolean
-		hasSession(
-			String		session )
-		{
-			/*
-			 * Actually it seems the webui doesn't consistently handle the removed-ids so just
-			 * return the ID for a time period to ensure that it is processed.
-			 * Update - might be that multiple clients in the same browser are using the same session id
-			 * so going to go with reporting 'recently-removed' for a time period instead of just once
-			 * per session 
-			 * 
-			synchronized( sessions ){
-				
-				if ( sessions.contains( session )){
-					
-					return( true );
-					
-				}else{
-					
-					sessions.add( session );
-					
-					return( false );
-				}
-			}
-			*/
-			return( false );
-		}
-	}
-	
-	private class
-	MagnetDownload
-		implements DownloadStub
-	{
-		private URL				magnet_url;
-		private String			name;
-		private byte[]			hash;
-		private long			create_time;
-		
-		private Map<TorrentAttribute,Long>	attributes = new HashMap<>();
-		
-		private String temp_dir = AETemporaryFileHandler.getTempDirectory().getAbsolutePath();
-		
-		private Throwable error;
-		
-		private
-		MagnetDownload(
-			URL		_magnet,
-			String friendlyName )
-		{
-			create_time	= SystemTime.getCurrentTime();
-			
-			magnet_url	= _magnet;
-			
-			String	str = magnet_url.toExternalForm();
-			
-			int	pos = str.indexOf( '?' );
-			
-			if ( pos != -1 ){
-				
-				str = str.substring( pos+1 );
-			}
 
-			List<String> args = fastSplit(str, '&');
-
-			Map<String,String>	arg_map = new HashMap<>();
-			
-			for ( String arg: args ){
-
-				List<String> bits = fastSplit(arg, '=');
-				
-				if ( bits.size() == 2 ){
-					
-					try{
-						String lhs = bits.get(0).trim().toLowerCase( Locale.US );
-						String rhs = URLDecoder.decode( bits.get(1).trim(), Constants.DEFAULT_ENCODING);
-						
-						if ( lhs.equals( "xt" )){
-							
-							if ( rhs.toLowerCase( Locale.US ).startsWith( "urn:btih:" )){
-								
-								arg_map.put( lhs, rhs );
-								
-							}else{
-								
-								String existing = arg_map.get( "xt" );
-								
-								if ( 	existing == null ||
-										( !existing.toLowerCase( Locale.US ).startsWith( "urn:btih:" )  && rhs.startsWith( "urn:sha1:" ))){
-									
-									arg_map.put( lhs, rhs );
-								}
-							}
-						}else{
-							
-							arg_map.put( lhs, rhs );
-						}
-					}catch( Throwable e ){
-					}
-				}
-			}
-			
-			hash	= new byte[0];
-
-			String hash_str = arg_map.get( "xt" );
-			
-			if ( hash_str != null ){
-				
-				hash_str = hash_str.toLowerCase( Locale.US );
-				
-				if ( hash_str.startsWith( "urn:btih:" ) || hash_str.startsWith( "urn:sha1" )){
-					
-					hash = UrlUtils.decodeSHA1Hash( hash_str.substring( 9 ));
-				}
-			}
-			
-			name	= arg_map.get( "dn" );
-			
-			if ( name == null ){
-				
-				if ( friendlyName != null ){
-
-					name = friendlyName;
-
-				} else if ( hash == null ){
-					
-					name = magnet_url.toExternalForm();
-					
-				}else{
-					
-					name = Base32.encode( hash );
-				}
-			}
-			
-			name = "Magnet download for '" + name + "'";
-			
-			getID( this, true );
-		}
-		
-		private long
-		getCreateTime()
-		{
-			return( create_time );
-		}
-		
-		private URL
-		getMagnetURL()
-		{
-			return( magnet_url );
-		}
-		
-		@Override
-		public boolean
-		isStub()
-		{
-			return( true );
-		}
-		
-		@Override
-		public Download
-		destubbify()
-		
-			throws DownloadException
-		{
-			throw( new DownloadException( "Not supported" ));
-		}
-		
-		@Override
-		public String
-		getName()
-		{
-			return( name );
-		}
-		
-		@Override
-		public byte[]
-		getTorrentHash()
-		{
-			return( hash );
-		}
-		
-		@Override
-		public Torrent
-		getTorrent() 
-		{
-			return( null );
-		}
-		
-		@Override
-		public long
-		getTorrentSize()
-		{
-			return( 16*1024 );	// dont know the size
-		}
-		
-		@Override
-		public String
-		getSavePath()
-		{
-			return( temp_dir );
-		}
-		
-		private void
-		setError(
-			Throwable e )
-		{
-			error	= e;
-		}
-		
-		private Throwable
-		getError()
-		{
-			return( error );
-		}
-		
-		@Override
-		public DownloadStubFile[]
-		getStubFiles()
-		{
-			return( new DownloadStubFile[0]);
-		}
-		
-		@Override
-		public long
-		getLongAttribute(
-			TorrentAttribute 	attribute )
-		{
-			Long l = attributes.get( attribute );
-			
-			return( l==null?0:l );
-		}
-		  
-		@Override
-		public void
-		setLongAttribute(
-			TorrentAttribute 	attribute, 
-			long 				value)
-		{
-			attributes.put( attribute, value );
-		}
-		  
-		@Override
-		public void
-		remove()
-		
-			throws DownloadException, DownloadRemovalVetoException
-		{
-			
-		}
-	}
-	
 	@Override
 	protected void log(String str) {
 		// TODO Auto-generated method stub

@@ -25,6 +25,7 @@ import java.util.*;
 import java.net.*;
 import java.io.*;
 
+import com.aelitis.azureus.plugins.xmwebui.TransmissionVars;
 import com.biglybt.core.util.UrlUtils;
 import org.json.simple.JSONObject;
 
@@ -145,7 +146,7 @@ XMRPCClientTest
 				
 				request.put( "arguments", arg_map );
 	
-				arg_map.put( "peer-port", 4444 );
+				arg_map.put(TransmissionVars.TR_PREFS_KEY_PEER_PORT, 4444 );
 				
 				String json = JSONUtils.encodeToJSON( request );
 				
@@ -235,14 +236,14 @@ XMRPCClientTest
 			{
 				JSONObject request = new JSONObject();
 
-				request.put( "method", "session-set" );
+				request.put( "method", TransmissionVars.METHOD_SESSION_SET);
 
 				Map	arg_map = new HashMap();
 				
 				request.put( "arguments", arg_map );
 
-				arg_map.put( "speed-limit-up-enabled", true );
-				arg_map.put( "speed-limit-up", 5 );
+				arg_map.put(TransmissionVars.TR_PREFS_KEY_USPEED_ENABLED, true );
+				arg_map.put(TransmissionVars.TR_PREFS_KEY_USPEED_KBps, 5 );
 				
 				JSONObject reply = client.call( request );
 				
@@ -251,7 +252,7 @@ XMRPCClientTest
 			{
 				JSONObject	request = new JSONObject();
 			
-				request.put( "method", "session-get" );
+				request.put( "method", TransmissionVars.METHOD_SESSION_GET);
 			
 				JSONObject reply = client.call( request );
 			

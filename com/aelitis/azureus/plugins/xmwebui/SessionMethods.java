@@ -59,7 +59,7 @@ public class SessionMethods
 			PluginInterface plugin_interface, TrackerWebPageRequest request,
 			Map<String, Object> args, Map<String, Object> result) {
 		//noinspection unchecked
-		List<String> fields = (List<String>) args.get("fields");
+		List<String> fields = (List<String>) args.get(ARG_FIELDS);
 		boolean all = fields == null || fields.size() == 0;
 		if (!all) {
 			// sort so we can't use Collections.binarySearch
@@ -473,7 +473,7 @@ public class SessionMethods
 				} else if (key.equals(TR_PREFS_KEY_DOWNLOAD_QUEUE_SIZE)) {
 					final int maxActive = pc.getCoreIntParameter(
 							PluginConfig.CORE_PARAM_INT_MAX_ACTIVE);
-					int newMaxDL = XMWebUIPlugin.getNumber(val).intValue();
+					int newMaxDL = StaticUtils.getNumber(val).intValue();
 					if (newMaxDL > maxActive) {
 						pc.setCoreIntParameter(PluginConfig.CORE_PARAM_INT_MAX_ACTIVE,
 								newMaxDL);
@@ -490,7 +490,7 @@ public class SessionMethods
 							max);
 
 				} else if (key.equals(TR_PREFS_KEY_SEED_QUEUE_SIZE)) {
-					int maxSeeds = XMWebUIPlugin.getNumber(val).intValue();
+					int maxSeeds = StaticUtils.getNumber(val).intValue();
 
 					final int maxActive = pc.getCoreIntParameter(
 							PluginConfig.CORE_PARAM_INT_MAX_ACTIVE);
@@ -507,7 +507,7 @@ public class SessionMethods
 					// TODO
 
 				} else if (key.equals(TR_PREFS_KEY_ACTIVE_QUEUE_SIZE)) {
-					int maxActive = XMWebUIPlugin.getNumber(val).intValue();
+					int maxActive = StaticUtils.getNumber(val).intValue();
 					pc.setCoreIntParameter(PluginConfig.CORE_PARAM_INT_MAX_ACTIVE,
 							maxActive);
 
@@ -522,7 +522,7 @@ public class SessionMethods
 							plugin.getBoolean(val));
 
 				} else if (key.equals(TR_PREFS_KEY_DSPEED_ENABLED)
-						|| key.equals("downloadLimited")) {
+						|| key.equals(FIELD_TORRENT_DOWNLOAD_LIMITED)) {
 
 					int down_limit = pc.getCoreIntParameter(
 							PluginConfig.CORE_PARAM_INT_MAX_DOWNLOAD_SPEED_KBYTES_PER_SEC);
@@ -547,12 +547,12 @@ public class SessionMethods
 								lastRate);
 					}
 				} else if (key.equals(TR_PREFS_KEY_DSPEED_KBps)
-						|| key.equals("downloadLimit")) {
+						|| key.equals(FIELD_TORRENT_DOWNLOAD_LIMIT)) {
 
 					int down_limit = pc.getCoreIntParameter(
 							PluginConfig.CORE_PARAM_INT_MAX_DOWNLOAD_SPEED_KBYTES_PER_SEC);
 
-					int limit = XMWebUIPlugin.getNumber(val).intValue();
+					int limit = StaticUtils.getNumber(val).intValue();
 
 					if (limit != down_limit) {
 
@@ -605,7 +605,7 @@ public class SessionMethods
 					pc.setCoreBooleanParameter(
 							PluginConfig.CORE_PARAM_BOOLEAN_AUTO_SPEED_SEEDING_ON, false);
 
-					int limit = XMWebUIPlugin.getNumber(val).intValue();
+					int limit = StaticUtils.getNumber(val).intValue();
 
 					pc.setCoreIntParameter(
 							PluginConfig.CORE_PARAM_INT_MAX_UPLOAD_SPEED_KBYTES_PER_SEC,
@@ -623,7 +623,7 @@ public class SessionMethods
 				} else if (key.equals(TransmissionVars.TR_PREFS_KEY_PEER_PORT)
 						|| key.equals("port")) {
 
-					int port = XMWebUIPlugin.getNumber(val).intValue();
+					int port = StaticUtils.getNumber(val).intValue();
 
 					pc.setCoreIntParameter(PluginConfig.CORE_PARAM_INT_INCOMING_TCP_PORT,
 							port);
@@ -640,7 +640,7 @@ public class SessionMethods
 				} else if (key.equals("seedRatioLimit")) {
 					// RPC v5
 
-					float ratio = XMWebUIPlugin.getNumber(val).floatValue();
+					float ratio = StaticUtils.getNumber(val).floatValue();
 
 					COConfigurationManager.setParameter("Stop Ratio", ratio);
 
@@ -653,7 +653,7 @@ public class SessionMethods
 					if (limit) {
 						// 2f is made up; sharing is caring
 						if (args.containsKey("seedRatioLimit")) {
-							ratio = XMWebUIPlugin.getNumber(args.get("seedRatioLimit"),
+							ratio = StaticUtils.getNumber(args.get("seedRatioLimit"),
 									2f).floatValue();
 						} else {
 							ratio = 2f;
@@ -705,7 +705,7 @@ public class SessionMethods
 		 */
 
 		//noinspection unchecked
-		List<String> fields = (List<String>) args.get("fields");
+		List<String> fields = (List<String>) args.get(ARG_FIELDS);
 		boolean all = fields == null || fields.size() == 0;
 		if (!all) {
 			// sort so we can't use Collections.binarySearch

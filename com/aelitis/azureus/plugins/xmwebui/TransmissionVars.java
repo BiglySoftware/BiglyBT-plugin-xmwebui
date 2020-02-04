@@ -323,6 +323,29 @@ public class TransmissionVars
 	public static final String FIELD_LAST_UPDATED = "LastUpdated";
 
 	public static final String FIELD_TORRENT_IS_COMPLETE = "isComplete";
+
+	public static final String FIELD_TORRENT_ANNOUNCEURL = "announceURL";
+
+	public static final String FIELD_TORRENT_BANDWITH_PRIORITY = "bandwidthPriority";
+
+	public static final String FIELD_TORRENT_CORRUPT_EVER = "corruptEver";
+
+	public static final String FIELD_TORRENT_DATE_CREATED = "dateCreated";
+
+	public static final String FIELD_TORRENT_DESIRED_AVAILABLE = "desiredAvailable";
+
+	public static final String FIELD_TORRENT_DOWNLOAD_LIMIT = "downloadLimit";
+
+	public static final String FIELD_TORRENT_DOWNLOAD_LIMITED = "downloadLimited";
+
+	public static final String FIELD_TORRENT_ETA_IDLE = "etaIdle";
+
+	public static final String FIELD_TORRENT_HAVE_UNCHECKED = "haveUnchecked";
+
+	public static final String FIELD_TORRENT_HAVE_VALID = "haveValid";
+
+	public static final String FIELD_TORRENT_HONORS_SESSION_LIMITS = "honorsSessionLimits";
+
 	//////////////////////////////////////////////////////////////////////////////
 
 	public static final String TR_SESSION_STATS_ACTIVE_TORRENT_COUNT = "activeTorrentCount";
@@ -565,6 +588,8 @@ public class TransmissionVars
 	public static final String ARG_TORRENT_GET_FILE_FIELDS = "file-fields";
 
 	public static final String ARG_IDS = "ids";
+
+	public static final String ARG_FIELDS = "fields";
 
 	//////////////////////////////////////////////////////////////////////////////
 
