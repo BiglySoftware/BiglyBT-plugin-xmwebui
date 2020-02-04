@@ -1695,14 +1695,15 @@ public class TorrentGetMethods
 			boolean showAllVuze = sortedFields.size() == 0;
 
 			if (canAdd(FIELD_FILES_CONTENT_URL, sortedFields, showAllVuze)) {
+				String s = "";
 				URL f_stream_url = PlayUtils.getMediaServerContentURL(file);
 				if (f_stream_url != null) {
-					String s = adjustURL(host, f_stream_url);
+					s = adjustURL(host, f_stream_url);
 					if (baseURL != null && s.startsWith(baseURL)) {
 						s = s.substring(baseURL.length());
 					}
-					obj.put(FIELD_FILES_CONTENT_URL, s);
 				}
+				obj.put(FIELD_FILES_CONTENT_URL, s);
 			}
 
 			if (canAdd(FIELD_FILES_FULL_PATH, sortedFields, showAllVuze)) {
@@ -1710,6 +1711,16 @@ public class TorrentGetMethods
 					realFile = file.getFile(true);
 				}
 				obj.put(FIELD_FILES_FULL_PATH, realFile.toString());
+			}
+			
+			if (canAdd("eta", sortedFields, showAllVuze)) {
+				long eta = -1;
+				try {
+					com.biglybt.core.disk.DiskManagerFileInfo coreFileInfo = PluginCoreUtils.unwrap(file);
+					eta = coreFileInfo.getETA();
+				} catch (DownloadException e) {
+				}
+				obj.put("eta", eta);
 			}
 		}
 

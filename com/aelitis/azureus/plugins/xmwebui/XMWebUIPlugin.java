@@ -124,6 +124,7 @@ XMWebUIPlugin
 	 *        ]
 	 *    * Add "peer-fields" to torrent-get, allowing ability to limit fields 
 	 *      sent from "peers" field 
+	 *    * Add "eta" to "files" in torrent-get
 	 * </pre>
 	 */
 	public static final int VUZE_RPC_VERSION = 8;
