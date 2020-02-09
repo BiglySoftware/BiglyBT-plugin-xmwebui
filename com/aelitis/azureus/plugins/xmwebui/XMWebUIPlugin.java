@@ -42,6 +42,7 @@ import com.biglybt.core.CoreFactory;
 import com.biglybt.core.category.Category;
 import com.biglybt.core.config.COConfigurationManager;
 import com.biglybt.core.download.DownloadManager;
+import com.biglybt.core.download.DownloadManagerState;
 import com.biglybt.core.global.GlobalManager;
 import com.biglybt.core.internat.MessageText;
 import com.biglybt.core.logging.LogAlert;
@@ -125,6 +126,7 @@ XMWebUIPlugin
 	 *    * Add "peer-fields" to torrent-get, allowing ability to limit fields 
 	 *      sent from "peers" field 
 	 *    * Add "eta" to "files" in torrent-get
+	 *    * Implemented "torrent-rename-path" method
 	 * </pre>
 	 */
 	public static final int VUZE_RPC_VERSION = 8;
@@ -2807,8 +2809,7 @@ XMWebUIPlugin
 	private void
 	method_Torrent_Rename_Path(
 			Map args, 
-			Map result)
-	{
+			Map result) throws TextualException, IOException {
 		/*
    Request arguments:
 
@@ -2820,9 +2821,73 @@ XMWebUIPlugin
    "name"                           | string     the file or folder's new name
 
    Response arguments: "path", "name", and "id", holding the torrent ID integer
+   
+   
+   NOTE: 
+    transmission web ui puts the existing name of the torrent in "path",
+    and "name" has the new torrent name.
 		 */
-		if ( trace_param.getValue() ){
-			log( "unhandled method: torrent-rename-path - " + args );
+		Object	ids = args.get( "ids" );
+		
+		String oldName = MapUtils.getMapString(args, "path", null);
+		if (oldName == null) {
+			throw new TextualException("torrent-rename-path: path is missing");
+		}
+		
+		String newName = MapUtils.getMapString(args, "name", "");
+		if (newName.isEmpty()) {
+			throw new TextualException("torrent-rename-path: new name is missing");
+		}
+
+		Core core = CoreFactory.getSingleton();
+		GlobalManager gm = core.getGlobalManager();
+
+		List<DownloadManager>	dms = getDownloadManagerListFromIDs( gm, ids );
+		
+		if (dms.size() != 1) {
+			throw new TextualException("torrent-rename-path must have only 1 torrent id");
+		}
+
+		DownloadManager dm = dms.get(0);
+
+		// Mostly copied from AdvRenameWindow
+		boolean saveLocationIsFolder = dm.getSaveLocation().isDirectory();
+		String newSavePath		= FileUtil.convertOSSpecificChars( newName, saveLocationIsFolder );
+
+		DownloadManagerState downloadState = dm.getDownloadState();
+		downloadState.setDisplayName(newName);
+		try {
+			try{
+				if ( dm.getTorrent().isSimpleTorrent()){
+	
+					String dnd_sf = downloadState.getAttribute( DownloadManagerState.AT_INCOMP_FILE_SUFFIX );
+	
+					if ( dnd_sf != null ){
+	
+						dnd_sf = dnd_sf.trim();
+	
+						String existing_name = dm.getSaveLocation().getName();
+	
+						if ( existing_name.endsWith( dnd_sf )){
+	
+							if ( !newSavePath.endsWith( dnd_sf )){
+	
+								newSavePath += dnd_sf;
+							}
+						}
+					}
+				}
+			}catch( Throwable e ){
+			}
+			dm.renameDownload(newSavePath);
+
+			result.put("path", oldName);
+			result.put("name", newName);
+			result.put("id", ids);
+		}  catch (Exception e) {
+			e.printStackTrace();
+
+			throw( new IOException( StaticUtils.getCausesMesssages( e )));
 		}
 	}
 
