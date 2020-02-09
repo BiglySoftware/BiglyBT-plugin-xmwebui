@@ -1,8 +1,6 @@
 var vz = window.vz || {};
 
 vz.mode = "trial";
-vz.lastSelectionChanged = "";
-vz.lastTorrenStates = "";
 
 vz.updatePrefs = function( prefs ){
 	var az_mode = prefs["az-mode"];
@@ -27,16 +25,6 @@ vz.executeSearch = function(search_input){
 		search_input = $("#search_input").get(0).value;
 	}
     if(! vz.validateSearch( search_input ) ) return;
-    
-    if (vz.hasExternalOSFunctions()) {
-		try {
-			if (externalOSFunctions.executeSearch(search_input)) {
-				return true;
-			}
-		} catch(e) {
-			console.log(e);
-		}
-    }
     
     var search_url;
     if (window.location.href.lastIndexOf("file:", 0) === 0) {
@@ -136,190 +124,7 @@ vz.utils = {
 };
 
 vz.logout = function() {
-	if (vz.hasExternalOSFunctions()) {
-		externalOSFunctions.logout();
-	} else {
-		window.location.href = "/pairedServiceLogout?redirect_to=http://remote.vuze.com/logout.php";
-	}
-};
-
-vz.showOpenTorrentDialog = function() {
-	if (vz.hasExternalOSFunctions()) {
-		try {
-			externalOSFunctions.showOpenTorrentDialog();
-			return true;
-		} catch(e) {
-			console.log(e);
-		}
-	}
-	return false;
-};
-
-vz.handleConnectionError = function(errNo, msg, status) {
-	if (vz.hasExternalOSFunctions()) {
-		try {
-			return externalOSFunctions.handleConnectionError(errNo, msg, status);
-		} catch(e) {
-			console.log(e);
-		}
-	}
-	return false;
-};
-
-vz.showConfirmDeleteDialog = function(torrent) {
-	if (vz.hasExternalOSFunctions()) {
-		try {
-			return externalOSFunctions.showConfirmDeleteDialog(torrent.getName(), torrent.getId());
-		} catch(e) {
-			console.log(e);
-		}
-	}
-	return false;
-};
-
-vz.handleTapHold = function() {
-	if (vz.hasExternalOSFunctions()) {
-		try {
-			return externalOSFunctions.handleTapHold();
-		} catch(e) {
-			console.log(e);
-		}
-	}
-	return false;
-};
-
-vz.uiReady = function() {
-	if (vz.hasExternalOSFunctions()) {
-		try {
-			externalOSFunctions.uiReady();
-		} catch(e) {
-			console.log(e);
-		}
-	}
-};
-
-vz.updateSpeed = function(downSpeed, upSpeed) {
-	if (vz.hasExternalOSFunctions()) {
-		try {
-			externalOSFunctions.updateSpeed(downSpeed, upSpeed);
-		} catch(e) {
-			console.log(e);
-		}
-	}
-};
-
-vz.updateTorrentStates = function(haveActive, havePaused, haveActiveSel, havePausedSel) {
-	if (vz.hasExternalOSFunctions()) {
-		try {
-			var t = String(haveActive) + String(havePaused)
-					+ String(haveActiveSel) + String(havePausedSel);
-			if (t !== vz.lastTorrenStates) {
-				vz.lastTorrenStates = t;
-				externalOSFunctions.updateTorrentStates(haveActive, havePaused,
-						haveActiveSel, havePausedSel);
-			}
-		} catch(e) {
-			console.log(e);
-		}
-	}
-};
-
-
-vz.updateTorrentCount= function(total) {
-	if (vz.hasExternalOSFunctions()) {
-		try {
-			externalOSFunctions.updateTorrentCount(total);
-		} catch(e) {
-			console.log(e);
-		}
-	}
-};
-
-vz.selectionChanged = function(selectedTorrents, haveActiveSel, havePausedSel) {
-
-	if (vz.hasExternalOSFunctions()) {
-		try {
-			var t = String(haveActiveSel) + String(havePausedSel)
-					+ selectedTorrents.map(function(elem) {return elem.id;}).join(",");
-			if (t !== vz.lastSelectionChanged) {
-				vz.lastSelectionChanged = t;
-				externalOSFunctions.selectionChanged(JSON.stringify(selectedTorrents),
-						haveActiveSel, havePausedSel);
-			}
-
-		} catch (e) {
-			console.log(e);
-		}
-	}
-};
-
-vz.updateSessionProperties = function(sessionProperties) {
-	if (vz.hasExternalOSFunctions()) {
-		try {
-			externalOSFunctions.updateSessionProperties(JSON.stringify(sessionProperties));
-		} catch(e) {
-			console.log(e);
-		}
-	}
-};
-
-vz.torrentInfoShown = function(id, page) {
-	if (vz.hasExternalOSFunctions()) {
-		try {
-			externalOSFunctions.torrentInfoShown(id, page);
-		} catch(e) {
-			console.log(e);
-		}
-	}
-};
-
-vz.slowAjax = function(id) {
-	if (vz.hasExternalOSFunctions()) {
-		try {
-			externalOSFunctions.slowAjax(id);
-		} catch(e) {
-			console.log(e);
-		}
-	}
-}
-
-vz.slowAjaxDone = function(id, ms) {
-	if (vz.hasExternalOSFunctions()) {
-		try {
-			externalOSFunctions.slowAjaxDone(id, ms);
-		} catch(e) {
-			console.log(e);
-		}
-	}
-}
-
-vz.goBack = function() {
-	if ($('#ul_torrent_context_menu').is(':visible')) {
-		externalOSFunctions.cancelGoBack(true);
-		$('#ul_torrent_context_menu').hide();
-		return false;
-	}
-
-	var visibleDialog = $('.ui-dialog-content:visible');
-	if (visibleDialog.length) {
-		externalOSFunctions.cancelGoBack(true);
-		visibleDialog.dialog('close');
-		return false;
-	}
-	
-	visibleDialog = $(".dialog_container:visible");
-	if (visibleDialog.length) {
-		externalOSFunctions.cancelGoBack(true);
-		visibleDialog.hide();
-		return false;
-	}
-	
-	externalOSFunctions.cancelGoBack(false);
-	return true;
-};
-
-vz.hasExternalOSFunctions = function() {
-	return  typeof externalOSFunctions !== 'undefined';
+    window.location.href = "/pairedServiceLogout";
 };
 
 function isTouchDevice(){
@@ -375,11 +180,6 @@ function getWebkitVersion() {
 
 $(document).ready( function(){
 	
-	if (!vz.hasExternalOSFunctions() && $.url().param("testAND") != "1") {
-		$(window).resize(vuzeOnResize);
-		vuzeOnResize();
-	}
-
     vz.utils.selectOnFocus();
     // WebKit 533.1  (Android 2.3.3) needs scrollable divs hack
     // WebKit 533.17.9  (iPhone OS 4_2_1) needs scrollable divs hack
@@ -399,11 +199,3 @@ $(document).ready( function(){
 		$("#toolbar-search").hide();
 	}
 });
-
-if (vz.hasExternalOSFunctions() || $.url().param("testAND") == "1") {
-	var fileref=document.createElement("link");
-	fileref.setAttribute("rel", "stylesheet");
-	fileref.setAttribute("type", "text/css");
-	fileref.setAttribute("href", "./style/transmission/vuzeandroid.css");
-	document.getElementsByTagName("head")[0].appendChild(fileref);
-}
