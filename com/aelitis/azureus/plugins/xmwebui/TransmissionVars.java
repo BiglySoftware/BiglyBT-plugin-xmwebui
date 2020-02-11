@@ -227,23 +227,27 @@ public class TransmissionVars
 	//////////////////////////////////////////////////////////////////////////////
 	//tr_idlelimit;
 	/* follow the global settings */
-	public static final long TR_IDLELIMIT_GLOBAL    = 0;
+	public static final long TR_IDLELIMIT_GLOBAL = 0;
+
 	/* override the global settings, seeding until a certain idle time */
-	public static final long TR_IDLELIMIT_SINGLE    = 1;
+	public static final long TR_IDLELIMIT_SINGLE = 1;
+
 	/* override the global settings, seeding regardless of activity */
 	public static final long TR_IDLELIMIT_UNLIMITED = 2;
-	
+
 	//////////////////////////////////////////////////////////////////////////////
 	//tr_ratiolimit;
-  /* follow the global settings */
-	public static final long TR_RATIOLIMIT_GLOBAL    = 0;
-  /* override the global settings, seeding until a certain ratio */
-	public static final long TR_RATIOLIMIT_SINGLE    = 1;
-  /* override the global settings, seeding regardless of ratio */
+	/* follow the global settings */
+	public static final long TR_RATIOLIMIT_GLOBAL = 0;
+
+	/* override the global settings, seeding until a certain ratio */
+	public static final long TR_RATIOLIMIT_SINGLE = 1;
+
+	/* override the global settings, seeding regardless of ratio */
 	public static final long TR_RATIOLIMIT_UNLIMITED = 2;
 
-	
 	public static final long TR_ETA_NOT_AVAIL = -1;
+
 	public static final long TR_ETA_UNKNOWN = -2;
 
 	//////////////////////////////////////////////////////////////////////////////
@@ -356,33 +360,45 @@ public class TransmissionVars
 
 	public static final String TR_SESSION_STATS_UPLOAD_SPEED = "uploadSpeed";
 
-	public static final String TR_SESSION_STATS_TORRENT_COUNT = "torrentCount";	
+	public static final String TR_SESSION_STATS_TORRENT_COUNT = "torrentCount";
 
-	public static final String TR_SESSION_STATS_CURRENT = "current-stats";	
+	public static final String TR_SESSION_STATS_CURRENT = "current-stats";
 
-	public static final String TR_SESSION_STATS_CUMULATIVE = "cumulative-stats";	
+	public static final String TR_SESSION_STATS_CUMULATIVE = "cumulative-stats";
 
 	//////////////////////////////////////////////////////////////////////////////
-	
-	public static final String FIELD_FILESTATS_BYTES_COMPLETED = "bytesCompleted";	
+
+	public static final String FIELD_FILESTATS_BYTES_COMPLETED = "bytesCompleted";
+
 	public static final String FIELD_FILESTATS_WANTED = "wanted";
+
 	public static final String FIELD_FILESTATS_PRIORITY = "priority";
+
 	public static final String FIELD_FILES_LENGTH = "length";
+
 	public static final String FIELD_FILES_NAME = "name";
+
 	public static final String FIELD_FILES_CONTENT_URL = "contentURL";
+
 	public static final String FIELD_FILES_FULL_PATH = "fullPath";
 
 	public static final String FIELD_FILES_INDEX = "index";
 
 	///////////////////////////////////////////////////////////////////////////////
 
-	public static final int TR_STATUS_STOPPED        = 0; /* Torrent is stopped */
-	public static final int TR_STATUS_CHECK_WAIT     = 1; /* Queued to check files */
-	public static final int TR_STATUS_CHECK          = 2; /* Checking files */
-	public static final int TR_STATUS_DOWNLOAD_WAIT  = 3; /* Queued to download */
-	public static final int TR_STATUS_DOWNLOAD       = 4; /* Downloading */
-	public static final int TR_STATUS_SEED_WAIT      = 5; /* Queued to seed */
-	public static final int TR_STATUS_SEED           = 6; /* Seeding */
+	public static final int TR_STATUS_STOPPED = 0; /* Torrent is stopped */
+
+	public static final int TR_STATUS_CHECK_WAIT = 1; /* Queued to check files */
+
+	public static final int TR_STATUS_CHECK = 2; /* Checking files */
+
+	public static final int TR_STATUS_DOWNLOAD_WAIT = 3; /* Queued to download */
+
+	public static final int TR_STATUS_DOWNLOAD = 4; /* Downloading */
+
+	public static final int TR_STATUS_SEED_WAIT = 5; /* Queued to seed */
+
+	public static final int TR_STATUS_SEED = 6; /* Seeding */
 
 	///////////////////////////////////////////////////////////////////////////////
 
@@ -423,38 +439,69 @@ public class TransmissionVars
 	///////////////////////////////////////////////////////////////////////////////
 
 	public static final String FIELD_SUBSCRIPTION_LIST = "subscriptions";
+
 	public static final String FIELD_SUBSCRIPTION_NAME = "name";
+
 	public static final String FIELD_SUBSCRIPTION_NEWCOUNT = "newResultsCount";
 
 	public static final String FIELD_SUBSCRIPTION_ADDEDON = "addedDate";
+
 	public static final String FIELD_SUBSCRIPTION_ASSOCIATION_COUNT = "associationCount";
+
 	public static final String FIELD_SUBSCRIPTION_POPULARITY = "popularity";
+
 	public static final String FIELD_SUBSCRIPTION_CATEGORY = "category";
+
 	public static final String FIELD_SUBSCRIPTION_CREATOR = "creator";
+
 	public static final String FIELD_SUBSCRIPTION_ENGINE_NAME = "engineName";
+
 	public static final String FIELD_SUBSCRIPTION_ENGINE_TYPE = "engineType";
+
 	public static final String FIELD_SUBSCRIPTION_HIGHEST_VERSION = "highestVersion";
+
 	public static final String FIELD_SUBSCRIPTION_NAME_EX = "nameEx";
+
 	public static final String FIELD_SUBSCRIPTION_QUERY_KEY = "queryKey";
+
 	public static final String FIELD_SUBSCRIPTION_REFERER = "referer";
+
 	public static final String FIELD_SUBSCRIPTION_TAG_UID = "tagUID";
+
 	public static final String FIELD_SUBSCRIPTION_URI = "uri";
+
 	public static final String FIELD_SUBSCRIPTION_ANONYMOUS = "anonymous";
+
 	public static final String FIELD_SUBSCRIPTION_AUTO_DL_SUPPORTED = "autoDLSupported";
+
 	public static final String FIELD_SUBSCRIPTION_AUTO_DOWNLOAD = "autoDownlaod";
+
 	public static final String FIELD_SUBSCRIPTION_MINE = "mine";
+
 	public static final String FIELD_SUBSCRIPTION_PUBLIC = "public";
+
 	public static final String FIELD_SUBSCRIPTION_IS_SEARCH_TEMPLATE = "isSearchTemplate";
+
 	public static final String FIELD_SUBSCRIPTION_SUBSCRIBED = "subscribed";
+
 	public static final String FIELD_SUBSCRIPTION_UPDATEABLE = "updateable";
+
 	public static final String FIELD_SUBSCRIPTION_SHAREABLE = "shareable";
+
 	public static final String FIELD_SUBSCRIPTION_RESULTS_COUNT = "resultsCount";
+
 	public static final String FIELD_SUBSCRIPTION_RESULTS = "results";
+
 	public static final String FIELD_SUBSCRIPTION_ENGINE = "engine";
+
 	public static final String FIELD_SUBSCRIPTION_ENGINE_URL = "url";
+
 	public static final String FIELD_SUBSCRIPTION_ENGINE_NAMEX = "nameEx";
+
 	public static final String FIELD_SUBSCRIPTION_ENGINE_AUTHMETHOD = "authMethod";
+
 	public static final String FIELD_SUBSCRIPTION_ENGINE_LASTUPDATED = "lastUpdated";
+
 	public static final String FIELD_SUBSCRIPTION_ENGINE_SOURCE = "source";
 
 	public static final String FIELD_SUBSCRIPTION_FAVICON = "favicon";
@@ -462,8 +509,11 @@ public class TransmissionVars
 	//////////////////////////////////////////////////////////////////////////////
 
 	public static final String FIELD_SUBSCRIPTION_RESULT_UID = "u";
+
 	public static final String FIELD_SUBSCRIPTION_RESULT_ISREAD = "subs_is_read";
+
 	public static final String FIELD_SUBSCRIPTION_RESULT_NAME = "n";
+
 	public static final String FIELD_SUBSCRIPTION_RESULT_ID = "subs_id";
 
 	//////////////////////////////////////////////////////////////////////////////
@@ -519,19 +569,40 @@ public class TransmissionVars
 	//////////////////////////////////////////////////////////////////////////////
 
 	public static final String FIELD_TAG_NAME = "name";
+
 	public static final String FIELD_TAG_COUNT = "count";
+
 	public static final String FIELD_TAG_TYPE = "type";
+
 	public static final String FIELD_TAG_TYPENAME = "type-name";
+
 	public static final String FIELD_TAG_CATEGORY_TYPE = "category-type";
+
 	public static final String FIELD_TAG_UID = "uid";
+
 	public static final String FIELD_TAG_ID = "id";
+
 	public static final String FIELD_TAG_COLOR = "color";
+
 	public static final String FIELD_TAG_CANBEPUBLIC = "canBePublic";
+
 	public static final String FIELD_TAG_PUBLIC = "public";
+
 	public static final String FIELD_TAG_VISIBLE = "visible";
+
 	public static final String FIELD_TAG_GROUP = "group";
+
 	public static final String FIELD_TAG_AUTO_ADD = "auto_add";
+
 	public static final String FIELD_TAG_AUTO_REMOVE = "auto_remove";
+
+	public static final String FIELD_TAG_CONSTRAINT = "constraint";
+
+	public static final String FIELD_TAG_FILE_LOCATION = "file-location";
+
+	public static final String FIELD_TAG_TRANSFER = "transfer";
+
+	public static final String FIELD_TAG_LIMIT = "limit";
 
 //////////////////////////////////////////////////////////////////////////////
 
@@ -596,9 +667,8 @@ public class TransmissionVars
 	//////////////////////////////////////////////////////////////////////////////
 
 	public static long convertVuzePriority(int priority) {
-		return priority == 0 ? TransmissionVars.TR_PRI_NORMAL
-				: priority < 0 ? TransmissionVars.TR_PRI_LOW
-				: TransmissionVars.TR_PRI_HIGH;
+		return priority == 0 ? TransmissionVars.TR_PRI_NORMAL : priority < 0
+				? TransmissionVars.TR_PRI_LOW : TransmissionVars.TR_PRI_HIGH;
 	}
 	//////////////////////////////////////////////////////////////////////////////
 

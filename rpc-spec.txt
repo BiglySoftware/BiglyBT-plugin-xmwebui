@@ -956,30 +956,30 @@ VZ.1 Start Search
        "error"              | string        If present, engine's error message
        "complete"           | boolean       Whether the search has completed for this engine
        "result"             | array of map  Search results
-		   key                  | value type & description
-		   ---------------------+-------------------------------------------------
-		   "d"                  | string    Publish Date in "<time> <units> ago" or "unknown"
-		   "ts"                 | string    Numeric Publish Date or "0" if unkown
-		   "c"                  | string    Category
-		   "n"                  | string    Name
-		   "s"                  | string    Numeric # of seeds; "-1" if unknown
-		   "p"                  | string    Numeric # of peers; "-1" if unknown
-		   "co"                 | string    Comments
-		   "l"                  | string    Download size, friendly format (ex "50 kB"), or "-1" if unknown
-		   "lb"                 | string    Numeric download size in bytes, or "0" if unkown
-		   "r"                  | string    Numeric search ranking value
-		   "ct"                 | string    Content Type
-		   "ac"                 | string    If present, numeric (float) accuracy, "0" to "1"
-		   "cdp"                | string    If present, URL to details page
-		   "dl"                 | string    If present, the download url
-		   "dbl"                | string    If present, the download button url
-		   "pl"                 | string    If present, the play url
-		   "v"                  | string    If present, the number of up votes
-		   "vd"                 | string    If present, the number of down votes
-		   "u"                  | string    If present, the UID (for subscriptions)
-		   "pr"                 | string    "1" for private, "0" for not
-		   "h"                  | string    If present, the torrent hash
-		   
+       key                  | value type & description
+       ---------------------+-------------------------------------------------
+       "d"                  | string    Publish Date in "<time> <units> ago" or "unknown"
+       "ts"                 | string    Numeric Publish Date or "0" if unkown
+       "c"                  | string    Category
+       "n"                  | string    Name
+       "s"                  | string    Numeric # of seeds; "-1" if unknown
+       "p"                  | string    Numeric # of peers; "-1" if unknown
+       "co"                 | string    Comments
+       "l"                  | string    Download size, friendly format (ex "50 kB"), or "-1" if unknown
+       "lb"                 | string    Numeric download size in bytes, or "0" if unkown
+       "r"                  | string    Numeric search ranking value
+       "ct"                 | string    Content Type
+       "ac"                 | string    If present, numeric (float) accuracy, "0" to "1"
+       "cdp"                | string    If present, URL to details page
+       "dl"                 | string    If present, the download url
+       "dbl"                | string    If present, the download button url
+       "pl"                 | string    If present, the play url
+       "v"                  | string    If present, the number of up votes
+       "vd"                 | string    If present, the number of down votes
+       "u"                  | string    If present, the UID (for subscriptions)
+       "pr"                 | string    "1" for private, "0" for not
+       "h"                  | string    If present, the torrent hash
+       
 VZ.3 Vuze Lifecycle
 
    Method name: "vuze-lifecycle"
@@ -1018,32 +1018,89 @@ VZ.4 Tags
    
    key                  | value type & description
    ---------------------+-------------------------------------------------
-	 "tags-hc"            | object       hashcode to use when requesting again
+   "tags-hc"            | object       hashcode to use when requesting again
    "tags"               | array of map.  Will not return if tags haven't changed from tags-hc
-
-		 key                  | value type & description
-		 ---------------------+-------------------------------------------------
-		 "name"               | string       Tag name
-		 "count"              | number       Number of torrents having this tag
-		 "type"               | number       Species of Tag
-													|                1: Category
-													|                2: Download State
-													|                3: Download Manual (User Tags)
-													|                4: Peer IP set
-		 "type-name"          | string       Things like "Category", but localized
-		 "category-type"      | number       Only if tag is a category
-													|                0: User
-													|                1: All
-													|                2: Uncategorized
-		 "uid"                | number       Unique id across tag types
-		 "id"                 | number       Id within this tag type  
-		 "color"              | string       #rrggbb color hint
-		 "canBePublic"        | boolean      true if tag can be set to public
-		 "public"             | boolean      true if tag is shared
-		 "visible"            | boolean      not useful
-		 "group"              | string       User defined group name that this tag belongs to
-		 "auto_add"           | boolean      Tag is auto-added based on rules
-		 "auto_remove"        | boolean      Tag is auto-removed based on rules
+         key                  | value type & description
+         ---------------------+-------------------------------------------------
+         "name"               | string       Tag name
+         "count"              | number       Number of torrents having this tag
+         "type"               | number       Species of Tag
+                              |                1: Category
+                              |                2: Download State
+                              |                3: Download Manual (User Tags)
+                              |                4: Peer IP set
+         "type-name"          | string       Things like "Category", but localized
+         "category-type"      | number       Only if tag is a category
+                              |                0: User
+                              |                1: All
+                              |                2: Uncategorized
+         "uid"                | number       Unique id across tag types
+         "id"                 | number       Id within this tag type  
+         "color"              | string       #rrggbb color hint
+         "canBePublic"        | boolean      true if tag can be set to public
+         "public"             | boolean      true if tag is shared
+         "visible"            | boolean      not useful
+         "group"              | string       User defined group name that this tag belongs to
+         "auto_add"           | boolean      Tag is auto-added based on rules
+         "auto_remove"        | boolean      Tag is auto-removed based on rules
+         "constraint"         | map          Constraint logic
+                key        | value type & description
+                -----------+---------------------------------------------------
+                "text"     | string     See https://github.com/BiglySoftware/BiglyBT/wiki/Tags#Constraints
+                "mode"     | string     "am=0;" CM_ADD_REMOVE
+                           |            "am=1;" CM_ADD_ONLY
+                           |            "am=2;" CM_REMOVE_ONLY
+                           |            "am=3;" CM_NEW_DLS
+                "enabled"  | boolean    If the logic is enabled
+                "error"    | string     If present, describes an error in the contraint logic
+          "file-location"     | map          File Location settings.  All, some, or no keys may be present
+                key                         | value type & description
+                ----------------------------+---------------------------------------------------
+                "initial-save-folder"       | string
+                "initial-save-folder-flags" | number bitfield    0x0 None; 0x1 Data; 0x2 Torrent
+                "move-on-complete"          | string
+                "move-on-complete-flags"    | number bitfield    0x0 None; 0x1 Data; 0x2 Torrent
+                "copy-on-complete"          |
+                "copy-on-complete-flags"    | number bitfield    0x0 None; 0x1 Data; 0x2 Torrent
+                "move-on-remove"            |
+                "move-on-remove-flags"      | number bitfield    0x0 None; 0x1 Data; 0x2 Torrent
+          "limit"             | map          Limits on taggables
+                key                 | value type & description
+                --------------------+---------------------------------------------------
+                "max-taggables"     | number  Limit the # of taggables that can be in this tag
+                "removal-strategy"  | number  0=None
+                                    |         1=Archive
+                                    |         2=Remove from Library
+                                    |         3=Delete from device
+                                    |         4=Move to old tag (tag name + "_old" or "_Old")
+                "ordering"          | number  0=Date Added to Client
+                                    |         1=Date Added to Tag
+          "transfer"          | map          Tag Transfer Settings.  All, some, or no keys may be present
+                key                           | value type & description
+                ------------------------------+---------------------------------------------------
+                "download-limit"              | number   Limit download rate in bytes/sec
+                "upload-limit"                | number   Limit upload rate in bytes/sec
+                "current-download-rate"       | number   Current download rate in bytes/sec
+                "current-upload-rate"         | number   Current upload rate in bytes/sec
+                "download-session"            | number   bytes downloaded this session
+                "upload-session"              | number   bytes uploaded this session
+                "download-total"              | number   total bytes downloaded by this tag
+                "upload-total"                | number   total bytes uploaded by this tag
+                "upload-priority"             | number   0=normal priority; 1=higher priority
+                "min-sr"                      | number   Min. Share Ratio * 1000
+                "max-sr"                      | number   Max. Share Ratio * 1000
+                "max-sr-action"               | number   0=Queue
+                                              |          1=Pause
+                                              |          2=Stop
+                                              |          3=Archive
+                                              |          4=Remove from Library
+                                              |          5=Delete from Device 
+                "max-aggregate-sr"            | number   Max. Aggregate Share Ratio * 1000
+                "max-aggregate-sr-action"     | number   What to do when max is hit
+                                              |          1=Pause
+                                              |          2=Stop
+                "max-aggregate-sr-prioritize" | boolean  Aggregate has Priority
+                "first-priority-seeding"      | boolean  Set torrent 1st Priority Seeding
 
 
    Method name: "tags-lookup-start"

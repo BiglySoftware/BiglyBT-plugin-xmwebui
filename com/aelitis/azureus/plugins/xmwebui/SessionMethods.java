@@ -45,15 +45,12 @@ import com.biglybt.pif.PluginConfig;
 import com.biglybt.pif.PluginInterface;
 import com.biglybt.pif.tracker.web.TrackerWebPageRequest;
 
+import static com.aelitis.azureus.plugins.xmwebui.StaticUtils.canAdd;
 import static com.aelitis.azureus.plugins.xmwebui.TransmissionVars.*;
 
 public class SessionMethods
 {
 	private static long lastVerserverCheck;
-
-	private static boolean canAdd(String key, List<String> fields, boolean all) {
-		return all || Collections.binarySearch(fields, key) >= 0;
-	}
 
 	public static void method_Session_Get(XMWebUIPlugin plugin,
 			PluginInterface plugin_interface, TrackerWebPageRequest request,
@@ -451,7 +448,7 @@ public class SessionMethods
 
 				} else if (key.equals(TR_PREFS_KEY_BLOCKLIST_ENABLED)) {
 					// "blocklist-enabled"              | boolean    | true means enabled
-					plugin_interface.getIPFilter().setEnabled(plugin.getBoolean(val));
+					plugin_interface.getIPFilter().setEnabled(StaticUtils.getBoolean(val));
 
 				} else if (key.equals(TR_PREFS_KEY_MAX_CACHE_SIZE_MB)) {
 					// "cache-size-mb"                  | number     | maximum size of the disk cache (MB)
@@ -482,7 +479,7 @@ public class SessionMethods
 							newMaxDL);
 
 				} else if (key.equals(TR_PREFS_KEY_DOWNLOAD_QUEUE_ENABLED)) {
-					int max = plugin.getBoolean(val)
+					int max = StaticUtils.getBoolean(val)
 							? ConfigurationDefaults.getInstance().getIntParameter(
 									"max downloads")
 							: 0;
@@ -514,12 +511,12 @@ public class SessionMethods
 				} else if (key.equals(TR_PREFS_KEY_START)) {
 
 					COConfigurationManager.setParameter("Default Start Torrents Stopped",
-							!plugin.getBoolean(val));
+							!StaticUtils.getBoolean(val));
 
 				} else if (key.equals(TR_PREFS_KEY_RENAME_PARTIAL_FILES)) {
 
 					COConfigurationManager.setParameter("Rename Incomplete Files",
-							plugin.getBoolean(val));
+							StaticUtils.getBoolean(val));
 
 				} else if (key.equals(TR_PREFS_KEY_DSPEED_ENABLED)
 						|| key.equals(FIELD_TORRENT_DOWNLOAD_LIMITED)) {
@@ -527,7 +524,7 @@ public class SessionMethods
 					int down_limit = pc.getCoreIntParameter(
 							PluginConfig.CORE_PARAM_INT_MAX_DOWNLOAD_SPEED_KBYTES_PER_SEC);
 
-					boolean enable = plugin.getBoolean(val);
+					boolean enable = StaticUtils.getBoolean(val);
 
 					if (!enable && down_limit != 0) {
 
@@ -562,7 +559,7 @@ public class SessionMethods
 					}
 				} else if (key.equals(TR_PREFS_KEY_USPEED_ENABLED)
 						|| key.equals("uploadLimited")) {
-					boolean enable = plugin.getBoolean(val);
+					boolean enable = StaticUtils.getBoolean(val);
 
 					// turn off auto speed for both normal and seeding-only mode
 					// this will reset upload speed to what it was before it was on
@@ -616,7 +613,7 @@ public class SessionMethods
 				} else if (key.equals(
 						TransmissionVars.TR_PREFS_KEY_PEER_PORT_RANDOM_ON_START)) {
 
-					boolean random = plugin.getBoolean(val);
+					boolean random = StaticUtils.getBoolean(val);
 
 					pc.setUnsafeBooleanParameter("Listen.Port.Randomize.Enable", random);
 
@@ -647,7 +644,7 @@ public class SessionMethods
 				} else if (key.equals("seedRatioLimited")) {
 					// RPC v5
 
-					boolean limit = plugin.getBoolean(val);
+					boolean limit = StaticUtils.getBoolean(val);
 
 					float ratio;
 					if (limit) {

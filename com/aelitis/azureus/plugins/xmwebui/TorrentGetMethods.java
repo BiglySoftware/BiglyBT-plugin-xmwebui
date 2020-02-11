@@ -65,10 +65,6 @@ public class TorrentGetMethods
 
 	private final static Map<String, Map<Long, String>> session_torrent_info_cache = new HashMap<>();
 
-	private static boolean canAdd(String key, List<String> fields, boolean all) {
-		return all || Collections.binarySearch(fields, key) >= 0;
-	}
-
 	private static int[] getFileIndexes(Map args, long download_id) {
 		Object file_ids = args.get("file-indexes-" + download_id);
 		int[] file_indexes = null;
@@ -89,7 +85,7 @@ public class TorrentGetMethods
 		return file_indexes;
 	}
 
-	static void method_Torrent_Get(XMWebUIPlugin plugin,
+	static void get(XMWebUIPlugin plugin,
 			TrackerWebPageRequest request, String session_id, Map args,
 			Map<String, Object> result) {
 

@@ -22,6 +22,10 @@ import java.net.URL;
 import java.text.NumberFormat;
 import java.text.ParseException;
 import java.util.*;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
+import org.gudy.bouncycastle.util.encoders.Base64;
 
 import com.biglybt.core.tag.*;
 import com.biglybt.core.util.BEncoder;
@@ -60,6 +64,20 @@ public class StaticUtils
 		}
 
 		return (UrlUtils.setHost(url, host).toExternalForm());
+	}
+
+	static boolean canAdd(String key, List<String> fields, boolean all) {
+		return all || Collections.binarySearch(fields, key) >= 0;
+	}
+
+	static byte[] decodeBase64(String s) {
+		String newLineCheck = s.substring(0, 90);
+		boolean hasNewLine = newLineCheck.indexOf('\r') >= 0
+				|| newLineCheck.indexOf('\n') >= 0;
+		if (hasNewLine) {
+			s = s.replaceAll("[\r\n]+", "");
+		}
+		return Base64.decode(s);
 	}
 
 	static String encodeNumber(long x) {
@@ -114,6 +132,36 @@ public class StaticUtils
 		return list;
 	}
 
+	protected static boolean
+	getBoolean(
+		Object	o )
+	{
+		return getBoolean(o, false);
+	}
+
+	protected static Boolean
+	getBoolean(
+		Object	o,
+		Boolean defaultVal )
+	{
+		if ( o instanceof Boolean ){
+			
+			return((Boolean)o);
+						
+		}else if ( o instanceof String ){
+			
+			return( ((String)o).equalsIgnoreCase( "true" ));
+			
+		}else if ( o instanceof Number ){
+			
+			return(((Number)o).intValue()!=0);
+			
+		}else{
+			
+			return( defaultVal );
+		}
+	}
+
 	public static String getCausesMesssages(Throwable e) {
 		try {
 			StringBuilder sb = new StringBuilder();
@@ -131,6 +179,26 @@ public class StaticUtils
 
 		} catch (Throwable derp) {
 			return "derp " + derp.getClass().getSimpleName(); //NON-NLS
+		}
+	}
+
+	public static byte[] getHashFromMagnetURI(String magnetURI) {
+		Pattern patXT = Pattern.compile("xt=urn:(?:btih|sha1):([^&]+)");
+		Matcher matcher = patXT.matcher(magnetURI);
+		if (matcher.find()) {
+			return UrlUtils.decodeSHA1Hash(matcher.group(1));
+		}
+		return null;
+	}
+
+	protected static List
+	getList(
+		Object	o )
+	{
+		if ( o instanceof List ) {
+			return (List) o;
+		} else {
+			return new ArrayList();
 		}
 	}
 
