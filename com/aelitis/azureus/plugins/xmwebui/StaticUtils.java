@@ -132,33 +132,26 @@ public class StaticUtils
 		return list;
 	}
 
-	protected static boolean
-	getBoolean(
-		Object	o )
-	{
+	protected static boolean getBoolean(Object o) {
 		return getBoolean(o, false);
 	}
 
-	protected static Boolean
-	getBoolean(
-		Object	o,
-		Boolean defaultVal )
-	{
-		if ( o instanceof Boolean ){
-			
-			return((Boolean)o);
-						
-		}else if ( o instanceof String ){
-			
-			return( ((String)o).equalsIgnoreCase( "true" ));
-			
-		}else if ( o instanceof Number ){
-			
-			return(((Number)o).intValue()!=0);
-			
-		}else{
-			
-			return( defaultVal );
+	protected static Boolean getBoolean(Object o, Boolean defaultVal) {
+		if (o instanceof Boolean) {
+
+			return ((Boolean) o);
+
+		} else if (o instanceof String) {
+
+			return (((String) o).equalsIgnoreCase("true"));
+
+		} else if (o instanceof Number) {
+
+			return (((Number) o).intValue() != 0);
+
+		} else {
+
+			return (defaultVal);
 		}
 	}
 
@@ -191,11 +184,8 @@ public class StaticUtils
 		return null;
 	}
 
-	protected static List
-	getList(
-		Object	o )
-	{
-		if ( o instanceof List ) {
+	protected static List getList(Object o) {
+		if (o instanceof List) {
 			return (List) o;
 		} else {
 			return new ArrayList();
@@ -387,5 +377,49 @@ public class StaticUtils
 			}
 		}
 		return hash;
+	}
+
+	public static int[] htmlColorToRGB(String value) {
+		int[] ints = htmlColorToRGBA(value);
+		if (ints.length == 4) {
+			// Could multiply RGB by A/255
+			return new int[] {
+				ints[0],
+				ints[1],
+				ints[2]
+			};
+		}
+		return ints;
+	}
+
+	public static int[] htmlColorToRGBA(String value) {
+		int[] colors = null;
+		if (value.charAt(0) == '#') {
+			// hex color string
+			long l = Long.parseLong(value.substring(1), 16);
+			if (value.length() == 9) {
+				colors = new int[] {
+					(int) ((l >> 24) & 255),
+					(int) ((l >> 16) & 255),
+					(int) ((l >> 8) & 255),
+					(int) (l & 255)
+				};
+			} else if (value.length() == 4) {
+				colors = new int[] {
+					(int) ((l >> 8) & 15) << 4,
+					(int) ((l >> 8) & 4) << 4,
+					(int) (l & 15) << 4,
+					(int) 255
+				};
+			} else {
+				colors = new int[] {
+					(int) ((l >> 16) & 255),
+					(int) ((l >> 8) & 255),
+					(int) (l & 255),
+					(int) 255
+				};
+			}
+		}
+		return colors;
 	}
 }

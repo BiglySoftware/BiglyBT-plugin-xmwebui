@@ -122,6 +122,8 @@ XMWebUIPlugin
 	 *      sent from "peers" field 
 	 *    * Add "eta" to "files" in torrent-get
 	 *    * Implemented "torrent-rename-path" method
+	 *    * new Methods: "tags-add", "tags-set"
+	 *    * more fields for "tags-get-list": "constraint", "file-location", "limit", and "transfer" maps
 	 * </pre>
 	 */
 	public static final int VUZE_RPC_VERSION = 8;
@@ -1642,7 +1644,17 @@ XMWebUIPlugin
 					getTorrentMethods().renamePath(args, result);
 
 					break;
-				case "tags-get-list":
+				case METHOD_TAGS_ADD:
+					// Vuze RPC v8
+					getTagMethods().add(args, result);
+
+					break;
+				case METHOD_TAGS_SET:
+					// Vuze RPC v8
+					getTagMethods().set(args, result, false);
+
+					break;
+				case METHOD_TAGS_GET_LIST:
 					// Vuze RPC v3
 					getTagMethods().getList(args, result);
 

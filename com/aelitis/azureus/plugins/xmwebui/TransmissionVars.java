@@ -649,6 +649,12 @@ public class TransmissionVars
 
 	public static final String METHOD_TAGS_LOOKUP_START = "tags-lookup-start";
 
+	public static final String METHOD_TAGS_ADD = "tags-add";
+
+	public static final String METHOD_TAGS_SET = "tags-set";
+
+	public static final String METHOD_TAGS_GET_LIST = "tags-get-list";
+
 	public static final String METHOD_TAGS_LOOKUP_GET_RESULTS = "tags-lookup-get-results";
 
 	public static final String METHOD_TORRENT_REANNOUNCE = "torrent-reannounce";

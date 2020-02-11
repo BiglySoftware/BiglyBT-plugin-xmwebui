@@ -556,6 +556,8 @@ public class TorrentMethods
 				}
 			}
 		} else if (tagToAdd instanceof Number) {
+			// Tag UID is (TagType << 32) | (Tag ID)
+			// .intValue is stripping the TagType, which makes getTag(Tag ID) work
 			tag = tt.getTag(((Number) tagToAdd).intValue());
 		}
 
