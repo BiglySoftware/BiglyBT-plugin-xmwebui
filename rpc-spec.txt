@@ -1144,3 +1144,25 @@ VZ.4 Tags
  We use hascodes for lists and maps to reduce network traffic
  TODO: Document
  
+ 
+ VZ.6 Internationalization
+ 
+   Method name: "i18n-get-text"
+   
+   az-rpc-version: 8
+
+   Request arguments:
+
+   key                  | value type & description
+   ---------------------+-------------------------------------------------
+   "id"                 | string or array of string. See our MessageBundle
+                        | for keys. Keys don't often change, but having a
+                        | unit test for any keys you use is recommended.
+
+   Response arguments:
+   
+   key                  | value type & description
+   ---------------------+-------------------------------------------------
+   <id>                 | string   Text associated with the id, in the current 
+                        |          locale, or english if locale is missing id.
+                        |          If id doesn't exist, it will not be returned.

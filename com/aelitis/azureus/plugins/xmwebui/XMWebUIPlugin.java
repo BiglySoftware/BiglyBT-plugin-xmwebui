@@ -122,7 +122,7 @@ XMWebUIPlugin
 	 *      sent from "peers" field 
 	 *    * Add "eta" to "files" in torrent-get
 	 *    * Implemented "torrent-rename-path" method
-	 *    * new Methods: "tags-add", "tags-set"
+	 *    * new methods: "tags-add", "tags-set", "i18n-get-text"
 	 *    * more fields for "tags-get-list": "constraint", "file-location", "limit", and "transfer" maps
 	 * </pre>
 	 */
@@ -1546,14 +1546,14 @@ XMWebUIPlugin
 					save_core_state = true;
 
 					break;
-				case "torrent-start":
+				case METHOD_TORRENT_START:
 
 					getTorrentMethods().start(args, result);
 
 					save_core_state = true;
 
 					break;
-				case "torrent-start-now":
+				case METHOD_TORRENT_START_NOW:
 					// RPC v14
 
 					getTorrentMethods().startNow(args, result);
@@ -1561,14 +1561,14 @@ XMWebUIPlugin
 					save_core_state = true;
 
 					break;
-				case "torrent-stop":
+				case METHOD_TORRENT_STOP:
 
 					getTorrentMethods().stop(args, result);
 
 					save_core_state = true;
 
 					break;
-				case "torrent-verify":
+				case METHOD_TORRENT_VERIFY:
 
 					getTorrentMethods().verify(args, result);
 
@@ -1739,6 +1739,12 @@ XMWebUIPlugin
 					processConsole(args, result);
 
 					break;
+					
+				case METHOD_I18N_GET_TEXT:
+					
+					processI18nGetText(args, result);
+					
+					break;
 				default:
 
 					JSONServer server = (JSONServer) json_server_methods.get(method);
@@ -1763,6 +1769,25 @@ XMWebUIPlugin
 					// particularly necessary for the android client as untidy closedown is common
 				
 				CoreFactory.getSingleton().saveState();
+			}
+		}
+	}
+
+	private void processI18nGetText(Map args, Map result) throws TextualException {
+		Object id = args.get("id");
+		List<String> ids;
+		if (id instanceof String) {
+			ids = new ArrayList<>();
+			ids.add((String) id);
+		} else if (id instanceof List) {
+			ids = (List<String>) id;
+		} else {
+			throw new TextualException("id not String or Array");
+		}
+
+		for (String key : ids) {
+			if (MessageText.keyExists(key)) {
+				result.put(key, MessageText.getString(key));
 			}
 		}
 	}

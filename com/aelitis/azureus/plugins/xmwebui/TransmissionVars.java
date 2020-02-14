@@ -26,6 +26,7 @@ package com.aelitis.azureus.plugins.xmwebui;
    * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
    * DEALINGS IN THE SOFTWARE. 
  */
+@SuppressWarnings("ALL")
 public class TransmissionVars
 {
 	/** we won't (announce,scrape) this torrent to this tracker because
@@ -203,11 +204,11 @@ public class TransmissionVars
 
 	//////////////////////////////////////////////////////////////////////////////
 
-	public static final long TR_PRI_LOW = -1;
+	public static final int TR_PRI_LOW = -1;
 
-	public static final long TR_PRI_NORMAL = 0; /* since NORMAL is 0, memset initializes nicely */
+	public static final int TR_PRI_NORMAL = 0; /* since NORMAL is 0, memset initializes nicely */
 
-	public static final long TR_PRI_HIGH = 1;
+	public static final int TR_PRI_HIGH = 1;
 
 	//////////////////////////////////////////////////////////////////////////////
 	//tr_stat_errtype;
@@ -376,6 +377,7 @@ public class TransmissionVars
 
 	public static final String FIELD_FILES_LENGTH = "length";
 
+	/** File including path relative to save directory **/
 	public static final String FIELD_FILES_NAME = "name";
 
 	public static final String FIELD_FILES_CONTENT_URL = "contentURL";
@@ -659,6 +661,16 @@ public class TransmissionVars
 
 	public static final String METHOD_TORRENT_REANNOUNCE = "torrent-reannounce";
 
+	public static final String METHOD_TORRENT_VERIFY = "torrent-verify";
+
+	public static final String METHOD_TORRENT_START = "torrent-start";
+
+	public static final String METHOD_TORRENT_START_NOW = "torrent-start-now";
+
+	public static final String METHOD_TORRENT_STOP = "torrent-stop";
+
+	public static final String METHOD_I18N_GET_TEXT = "i18n-get-text";
+	
 	//////////////////////////////////////////////////////////////////////////////
 	// RPC call method arguments
 
