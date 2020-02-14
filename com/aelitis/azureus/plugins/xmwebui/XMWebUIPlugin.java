@@ -124,6 +124,7 @@ XMWebUIPlugin
 	 *    * Implemented "torrent-rename-path" method
 	 *    * new methods: "tags-add", "tags-set", "i18n-get-text"
 	 *    * more fields for "tags-get-list": "constraint", "file-location", "limit", and "transfer" maps
+	 *    * Add "isForced" to torrent-get
 	 * </pre>
 	 */
 	public static final int VUZE_RPC_VERSION = 8;

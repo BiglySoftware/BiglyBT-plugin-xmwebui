@@ -737,6 +737,11 @@ public class TorrentGetMethods
 					value = torrentGet_status(download);
 
 					break;
+				case FIELD_TORRENT_IS_FORCED:
+					
+					value = download.isForceStart();
+					
+					break;
 				case "trackers":
 
 					String agent = MapUtils.getMapString(request.getHeaders(),

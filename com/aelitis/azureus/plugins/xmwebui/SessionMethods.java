@@ -52,6 +52,40 @@ public class SessionMethods
 {
 	private static long lastVerserverCheck;
 
+	private static final List<String> listSupports;
+
+	static {
+		// TODO: have a new method, such as "rpc-supports-list" which returns
+		//       a full list of methods (map), fields (map in methods), features (map)
+		// @formatter:off
+		listSupports = Arrays.asList(
+			"rpc:receive-gzip",
+			"field:files-hc",
+			"method:tags-add",
+			"method:tags-set",
+			"method:tags-get-list",
+			"field:torrent-set-name",
+			"method:subscription-get",
+			"method:subscription-add",
+			"method:subscription-remove",
+			"method:subscription-set",
+			"method:vuze-plugin-get-list",
+			"method:tags-lookup-start",
+			"method:tags-lookup-get-results",
+			"method:vuze-search-start",
+			"method:vuze-search-get-results",
+			"method:torrent-rename-path",
+			"method:i18n-get-text",
+			"torrent-add:torrent-duplicate",
+			"field:session:active-queue-size",
+			"field:torrent-get:peer-fields",
+			"field:torrent-get:eta",
+			"field:torrent-get:isForced",
+			"field:torrent-get:files:eta"
+		);
+		// @formatter:on
+	}
+
 	public static void method_Session_Get(XMWebUIPlugin plugin,
 			PluginInterface plugin_interface, TrackerWebPageRequest request,
 			Map<String, Object> args, Map<String, Object> result) {
@@ -343,23 +377,15 @@ public class SessionMethods
 		}
 
 		if (canAdd("rpc-supports", fields, all)) {
-			List<String> listSupports = new ArrayList<>();
-			Collections.addAll(listSupports, "rpc:receive-gzip", "field:files-hc",
-					"method:tags-get-list", "field:torrent-set-name",
-					"method:subscription-get", "method:subscription-add",
-					"method:subscription-remove", "method:subscription-set",
-					"method:vuze-plugin-get-list", "method:tags-lookup-start",
-					"method:tags-lookup-get-results", "method:vuze-search-start",
-					"method:vuze-search-get-results", "torrent-add:torrent-duplicate",
-					"field:session:active-queue-size");
 
+			List<String> list = new ArrayList<>(listSupports);
 			synchronized (plugin.json_server_method_lock) {
 				for (String key : plugin.json_server_methods.keySet()) {
-					listSupports.add("method:" + key);
+					list.add("method:" + key);
 				}
 			}
 
-			result.put("rpc-supports", listSupports);
+			result.put("rpc-supports", list);
 		}
 
 		if (canAdd("az-message", fields, all)) {
@@ -448,7 +474,8 @@ public class SessionMethods
 
 				} else if (key.equals(TR_PREFS_KEY_BLOCKLIST_ENABLED)) {
 					// "blocklist-enabled"              | boolean    | true means enabled
-					plugin_interface.getIPFilter().setEnabled(StaticUtils.getBoolean(val));
+					plugin_interface.getIPFilter().setEnabled(
+							StaticUtils.getBoolean(val));
 
 				} else if (key.equals(TR_PREFS_KEY_MAX_CACHE_SIZE_MB)) {
 					// "cache-size-mb"                  | number     | maximum size of the disk cache (MB)
