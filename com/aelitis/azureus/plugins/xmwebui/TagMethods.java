@@ -300,7 +300,7 @@ public class TagMethods
 		if (val == null) {
 			return false;
 		}
-		map.put(key, val);
+		map.put(key, val.getAbsolutePath());
 		return true;
 	}
 
