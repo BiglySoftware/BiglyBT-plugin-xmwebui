@@ -925,14 +925,14 @@ function Inspector(controller) {
             refreshTorrents(rescheduleTimeout);
         }
 
-        function rescheduleTimeout(msec) {
-            d.refreshTimeout = setTimeout(callback, msec);
+        function rescheduleTimeout() {
+            msec = data.controller[Prefs._RefreshRate] * 1000;
+            if (msec > 0) {
+                d.refreshTimeout = setTimeout(callback, msec);
+            }
         }
 
-        msec = controller[Prefs._RefreshRate] * 1000;
-        if (msec > 0) {
-            rescheduleTimeout(msec);
-        }
+        rescheduleTimeout();
         refreshTorrents();
 
         // refresh the inspector's UI
