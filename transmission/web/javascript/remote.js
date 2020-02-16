@@ -289,6 +289,9 @@ TransmissionRemote.prototype = {
         var remote = this;
         var o = {
             method: 'tags-get-list',
+            arguments: {
+               fields: [ "uid", "name" ]
+            }
         };
         this.sendRequest(o, function(response) {
             var args = response['arguments'];
