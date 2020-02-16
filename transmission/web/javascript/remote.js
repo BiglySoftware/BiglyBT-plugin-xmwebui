@@ -133,9 +133,9 @@ TransmissionRemote.prototype = {
             async = true;
         };
         
-        console.log("async? " + async + "; " + JSON.stringify(data));
-
  // >> BiglyBT
+        //console.log("async? " + async + "; " + JSON.stringify(data));
+
         remote._lastCallWasError = false;
         // iPod caches without this
         data['math'] = Math.random();
