@@ -721,6 +721,10 @@ public class TorrentMethods
 					download.stop();
 				}
 
+				if (download.isForceStart()) {
+					download.setForceStart(false);
+				}
+
 				if (state != Download.ST_DOWNLOADING && state != Download.ST_SEEDING) {
 
 					download.restart();
