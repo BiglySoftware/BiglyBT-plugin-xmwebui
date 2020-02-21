@@ -2212,6 +2212,8 @@ public class TorrentGetMethods
 				status_int = SEEDING;
 
 				break;
+
+			case Download.ST_READY:
 			case Download.ST_QUEUED:
 
 				if (download.isComplete()) {
@@ -2235,6 +2237,7 @@ public class TorrentGetMethods
 
 				break;
 			default:
+				// ST_WAITING, ST_PREPARING
 
 				DownloadManager core_download = PluginCoreUtils.unwrap(download);
 				if (core_download.getState() == DownloadManager.STATE_CHECKING) {
