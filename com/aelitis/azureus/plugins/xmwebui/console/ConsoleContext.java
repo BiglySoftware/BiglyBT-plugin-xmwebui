@@ -39,7 +39,7 @@ ConsoleContext
 
 	private boolean				console_closed;
 	
-	ConsoleContext(
+	public ConsoleContext(
 		Map<String, ConsoleContext>		console_contexts,
 		String		_uid )
 	
@@ -96,7 +96,7 @@ ConsoleContext
 		console = new ConsoleInput( "", CoreFactory.getSingleton(), console_in_stream, out, Boolean.FALSE);
 	}
 	
-	List<String>
+	public List<String>
 	process(
 		Map 	args )
 	{
