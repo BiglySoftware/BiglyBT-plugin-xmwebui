@@ -33,6 +33,7 @@ import com.biglybt.core.disk.DiskManagerPiece;
 import com.biglybt.core.download.DownloadManager;
 import com.biglybt.core.download.DownloadManagerState;
 import com.biglybt.core.download.DownloadManagerStats;
+import com.biglybt.core.internat.MessageText;
 import com.biglybt.core.peer.*;
 import com.biglybt.core.peer.util.PeerUtils;
 import com.biglybt.core.tag.*;
@@ -2293,8 +2294,32 @@ public class TorrentGetMethods
 				// NPE at com.aelitis.azureus.pif.extseed.ExternalSeedPlugin$5.getName(ExternalSeedPlugin.java:561
 			}
 
+			String host = name;
+
+			int type = tps.getType();
+			if (type == TrackerPeerSource.TP_TRACKER) {
+				URL url = tps.getURL();
+				if (url != null) {
+					host = url.getHost();
+				}
+			} else {
+				final String[] js_resource_keys = {
+						"SpeedView.stats.unknown",
+						"label.tracker",
+						"wizard.webseed.title",
+						"tps.type.dht",
+						"ConfigView.section.transfer.lan",
+						"tps.type.pex",
+						"tps.type.incoming",
+						"tps.type.plugin",
+				};
+				if (type >= 0 && type < js_resource_keys.length) {
+					host = MessageText.getString(js_resource_keys[type]);
+				}
+			}
+
 			/* human-readable string identifying the tracker */
-			map.put("host", name); // TODO
+			map.put("host", host); // TODO
 
 			/* the full announce URL */
 			map.put("announce", name); // TODO
