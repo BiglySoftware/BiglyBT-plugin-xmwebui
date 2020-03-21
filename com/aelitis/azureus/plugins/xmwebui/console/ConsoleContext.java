@@ -16,7 +16,7 @@
  * Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
  */
 
-package com.aelitis.azureus.plugins.xmwebui;
+package com.aelitis.azureus.plugins.xmwebui.console;
 
 import java.io.*;
 import java.util.*;
@@ -25,7 +25,7 @@ import com.biglybt.core.CoreFactory;
 import com.biglybt.core.util.*;
 import com.biglybt.ui.console.ConsoleInput;
 
-class
+public class
 ConsoleContext
 {
 	private final String		uid;

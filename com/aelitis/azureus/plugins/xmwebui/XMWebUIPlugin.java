@@ -23,6 +23,8 @@
 package com.aelitis.azureus.plugins.xmwebui;
 
 import java.io.*;
+import java.lang.reflect.Constructor;
+import java.lang.reflect.Method;
 import java.net.MalformedURLException;
 import java.net.URI;
 import java.net.URL;
@@ -2810,7 +2812,7 @@ XMWebUIPlugin
 		}
 	}
 	
-	private final Map<String,ConsoleContext>		console_contexts = new HashMap<>();
+	private final Map<String, Object /*ConsoleContext*/> console_contexts = new HashMap<>();
 
 	private void
 	processConsole(
@@ -2828,21 +2830,43 @@ XMWebUIPlugin
 			throw( new IOException( "instance_id missing" ));
 		}
 		
-		ConsoleContext	console;
-		
+		Object /*ConsoleContext*/	console;
+
+		Class<?> claConsoleContext;
+		Constructor<?> constructor;
+		Method methProcess;
+		try {
+			claConsoleContext = Class.forName("com.aelitis.azureus.plugins.xmwebui.console.ConsoleContext");
+			constructor = claConsoleContext.getConstructor(Map.class, String.class);
+			methProcess = claConsoleContext.getDeclaredMethod("process", Map.class);
+		} catch (Throwable t) {
+			throw new TextualException("Console not supported", t);
+		}
+
 		synchronized( console_contexts ){
 			
 			console = console_contexts.get( uid );
 		
 			if ( console == null ){
-				
-				console = new ConsoleContext( console_contexts, uid );
-				
+
+				//console = new ConsoleContext( console_contexts, uid );
+				try {
+					console = constructor.newInstance(console_contexts, uid);
+				} catch (Throwable t) {
+					throw new TextualException("Console not supported", t);
+				}
+
 				console_contexts.put( uid, console );
 			}
 		}
-		
-		List<String>	lines = console.process( args );
+
+		//List<String>	lines = console.process( args );
+		List<String>	lines;
+		try {
+			lines = (List<String>) methProcess.invoke(console, args );
+		} catch (Throwable t) {
+			throw new TextualException("Console not supported", t);
+		}
 				
 		result.put( "lines", lines );
 	}
