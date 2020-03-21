@@ -159,8 +159,14 @@ public class TorrentGetMethods
 					session_torrent_info_cache.clear();
 				}
 
-				Map<Long, String> torrent_info_cache = session_torrent_info_cache.computeIfAbsent(
-						session_id, k -> new HashMap<>());
+				// Android: minSDK 24
+//				Map<Long, String> torrent_info_cache = session_torrent_info_cache.computeIfAbsent(
+//						session_id, k -> new HashMap<>());
+				Map<Long, String> torrent_info_cache = session_torrent_info_cache.get(session_id);
+				if (torrent_info_cache == null) {
+					torrent_info_cache = new HashMap<>();
+					session_torrent_info_cache.put(session_id, torrent_info_cache);
+				}
 
 				List<Long> same = new ArrayList<>();
 
