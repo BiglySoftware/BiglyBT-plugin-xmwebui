@@ -1462,7 +1462,13 @@ XMWebUIPlugin
 		}catch( TextualException e ){
 
 			response.put( "result", e.getMessage());
-		
+
+			Throwable cause = e.getCause();
+			if (cause != null) {
+				log("processRequest", cause);
+				response.put("cause", cause.toString());
+			}
+
 		}catch( Throwable e ){
 			log("processRequest", e);
 			response.put( "result", "error: " + StaticUtils.getCausesMesssages( e ));
