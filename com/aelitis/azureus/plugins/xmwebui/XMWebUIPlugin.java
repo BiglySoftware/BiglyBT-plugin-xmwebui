@@ -1754,6 +1754,11 @@ XMWebUIPlugin
 					processI18nGetText(args, result);
 					
 					break;
+					
+				case "config-get":
+					ConfigMethods.get(args, result);
+					break;
+
 				default:
 
 					JSONServer server = (JSONServer) json_server_methods.get(method);

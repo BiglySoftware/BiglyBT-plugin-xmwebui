@@ -70,6 +70,14 @@ public class StaticUtils
 		return all || Collections.binarySearch(fields, key) >= 0;
 	}
 
+	static boolean addIfNotNull(Map<String, Object> map, String key, Object val) {
+		if (val == null) {
+			return false;
+		}
+		map.put(key, val);
+		return true;
+	}
+
 	static byte[] decodeBase64(String s) {
 		String newLineCheck = s.substring(0, 90);
 		boolean hasNewLine = newLineCheck.indexOf('\r') >= 0

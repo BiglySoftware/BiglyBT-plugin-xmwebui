@@ -81,7 +81,8 @@ public class SessionMethods
 			"field:torrent-get:peer-fields",
 			"field:torrent-get:eta",
 			"field:torrent-get:isForced",
-			"field:torrent-get:files:eta"
+			"field:torrent-get:files:eta",
+			"method:config-get"
 		);
 		// @formatter:on
 	}
