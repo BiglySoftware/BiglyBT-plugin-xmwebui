@@ -33,7 +33,6 @@ import static com.aelitis.azureus.plugins.xmwebui.StaticUtils.addIfNotNull;
 
 public class ConfigMethods
 {
-
 	static ConfigSections instance;
 
 	public static void get(Map<String, Object> args, Map<String, Object> result) {
@@ -44,7 +43,7 @@ public class ConfigMethods
 		List<String> parameters = MapUtils.getMapList(args, "parameters", null);
 
 		if (sections != null || parameters == null) {
-			getSections(sections, result);
+			getSections(sections, args, result);
 		}
 
 		if (parameters != null) {
@@ -85,6 +84,9 @@ public class ConfigMethods
 			pgInfoStack.push(pgInfo.copy());
 
 			pgInfo.reset((ParameterGroupImpl) param);
+			if (rid == null) {
+				pgInfo.list = list;
+			}
 
 			if (param.isVisible() && rid != null) {
 				String title = MessageText.getString(rid);
@@ -446,7 +448,7 @@ public class ConfigMethods
 	}
 
 	static Map<String, Object> getSectionAsMap(BaseConfigSection section,
-			boolean includeParameters) {
+			int maxUserModeRequested) {
 		Map<String, Object> out = new HashMap<>();
 		out.put("name", MessageText.getString(section.getSectionNameKey()));
 		out.put("id", getFriendlyConfigSectionID(section.getConfigSectionID()));
@@ -459,7 +461,7 @@ public class ConfigMethods
 			out.put("max-user-mode", maxUserMode);
 		}
 
-		if (includeParameters) {
+		if (maxUserModeRequested >= 0) {
 			boolean needsBuild = !section.isBuilt();
 			if (needsBuild) {
 				section.build();
@@ -484,6 +486,9 @@ public class ConfigMethods
 			Stack<ParamGroupInfo> pgInfoStack = new Stack<>();
 
 			for (Parameter param : params) {
+				if (param.getMinimumRequiredUserMode() > maxUserModeRequested) {
+					continue;
+				}
 				getParamAsMap(param, pgInfo, pgInfoStack);
 			}
 
@@ -495,7 +500,11 @@ public class ConfigMethods
 		return out;
 	}
 
-	static void getSections(List<String> sections, Map<String, Object> result) {
+	static void getSections(List<String> sections, Map<String, Object> args,
+			Map<String, Object> result) {
+
+		int maxUserMode = MapUtils.getMapInt(args, "max-user-mode",
+				Utils.getUserMode());
 		if (sections == null || sections.size() == 0) {
 			sections = new ArrayList<>();
 			sections.add("root");
@@ -514,11 +523,14 @@ public class ConfigMethods
 			List<Map<String, Object>> listSubSections = null;
 
 			for (BaseConfigSection section : allConfigSections) {
+				if (section.getMinUserMode() > maxUserMode) {
+					continue;
+				}
 				String sectionID = getFriendlyConfigSectionID(
 						section.getConfigSectionID());
 
 				if (sectionID.equals(requestedSection)) {
-					Map<String, Object> sectionAsMap = getSectionAsMap(section, true);
+					Map<String, Object> sectionAsMap = getSectionAsMap(section, maxUserMode);
 					jsonSection.putAll(sectionAsMap);
 				} else {
 					String sectionParentID = getFriendlyConfigSectionID(
@@ -528,7 +540,7 @@ public class ConfigMethods
 							listSubSections = new ArrayList<>();
 							jsonSection.put("sub-sections", listSubSections);
 						}
-						listSubSections.add(getSectionAsMap(section, false));
+						listSubSections.add(getSectionAsMap(section, -1));
 					}
 				}
 
@@ -694,17 +706,23 @@ public class ConfigMethods
 			for (BaseConfigSection repoConfigSection : repoList) {
 				String repoParentID = repoConfigSection.getParentSectionID();
 
-				boolean found = false;
-				for (int i = configSections.size() - 1; i >= 0; i--) {
+				int size = configSections.size();
+				int insertAt = size;
+				for (int i = 0; i < size; i++) {
 					BaseConfigSection configSection = configSections.get(i);
-					if (configSection.getConfigSectionID().equals(repoParentID)) {
-						configSections.add(i + 1, repoConfigSection);
-						found = true;
-						break;
+					if (insertAt == i) {
+						if (!repoParentID.equals(configSection.getParentSectionID())) {
+							break;
+						}
+						insertAt++;
+					} else if (configSection.getConfigSectionID().equals(repoParentID)) {
+						insertAt = i + 1;
 					}
 				}
-				if (!found) {
+				if (insertAt >= size) {
 					configSections.add(repoConfigSection);
+				} else {
+					configSections.add(insertAt, repoConfigSection);
 				}
 			}
 
