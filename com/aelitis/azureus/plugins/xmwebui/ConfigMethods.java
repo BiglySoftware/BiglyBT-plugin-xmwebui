@@ -102,7 +102,7 @@ public class ConfigMethods
 
 				if (ok) {
 					Map<String, Object> paramAsMap = getParamAsMap(parameter,
-							new ParamGroupInfo(), new Stack<>());
+							new ParamGroupInfo(), new Stack<>(), 99);
 					paramAsMap.put("section-id", pwcs.configSection);
 					mapSuccess.put(key, paramAsMap);
 				}
@@ -441,7 +441,8 @@ public class ConfigMethods
 	}
 
 	private static Map<String, Object> getParamAsMap(Parameter param,
-			final ParamGroupInfo pgInfo, Stack<ParamGroupInfo> pgInfoStack) {
+			final ParamGroupInfo pgInfo, Stack<ParamGroupInfo> pgInfoStack,
+			int maxUserModeRequested) {
 
 		List<Map<String, Object>> list = pgInfo.list;
 
@@ -453,7 +454,8 @@ public class ConfigMethods
 			out.put("min-user-mode", minimumRequiredUserMode);
 		}
 
-		if (param instanceof ParameterGroupImpl) {
+		if ((param instanceof ParameterGroupImpl)
+				&& param.getMinimumRequiredUserMode() <= maxUserModeRequested) {
 			String rid = ((ParameterGroup) param).getGroupTitleKey();
 
 			pgInfoStack.push(pgInfo.copy());
@@ -486,6 +488,10 @@ public class ConfigMethods
 		}
 
 		try {
+			if (param.getMinimumRequiredUserMode() > maxUserModeRequested) {
+				return out;
+			}
+
 			String key = param.getConfigKeyName();
 
 			if (key != null && (param instanceof ParameterImpl)) {
@@ -801,7 +807,7 @@ public class ConfigMethods
 					}
 
 					Map<String, Object> paramAsMap = getParamAsMap(param, pgInfo,
-							pgInfoStack);
+							pgInfoStack, 99);
 
 					if (i >= 0) {
 						numParametersLeft--;
@@ -867,10 +873,7 @@ public class ConfigMethods
 			Stack<ParamGroupInfo> pgInfoStack = new Stack<>();
 
 			for (Parameter param : params) {
-				if (param.getMinimumRequiredUserMode() > maxUserModeRequested) {
-					continue;
-				}
-				getParamAsMap(param, pgInfo, pgInfoStack);
+				getParamAsMap(param, pgInfo, pgInfoStack, maxUserModeRequested);
 			}
 
 			if (needsBuild) {
