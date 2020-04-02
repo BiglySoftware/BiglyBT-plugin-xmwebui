@@ -63,7 +63,7 @@ public class ConfigMethods
 		Map<String, Object> mapErrors = new HashMap<>();
 		Map<String, Object> mapSuccess = new HashMap<>();
 		result.put("success", mapSuccess);
-		result.put("errors", mapErrors);
+		result.put("error", mapErrors);
 
 		List<String> listSections = new ArrayList<>();
 		for (String key : parameters.keySet()) {
@@ -252,10 +252,10 @@ public class ConfigMethods
 
 	private static ValidationInfo validate(StringListParameter parameter,
 			Object newValueObject) {
-		if (!(newValueObject instanceof Number)) {
+		if (!(newValueObject instanceof String)) {
 			return new ValidationInfo(false, "Parameter value must be Number");
 		}
-		int newValue = ((Number) newValueObject).intValue();
+		String newValue = (String) newValueObject;
 
 		String[] values = parameter.getValues();
 		boolean found = false;
