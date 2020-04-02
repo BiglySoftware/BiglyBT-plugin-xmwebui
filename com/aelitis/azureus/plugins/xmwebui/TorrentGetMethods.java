@@ -36,7 +36,9 @@ import com.biglybt.core.download.DownloadManagerStats;
 import com.biglybt.core.internat.MessageText;
 import com.biglybt.core.peer.*;
 import com.biglybt.core.peer.util.PeerUtils;
+import com.biglybt.core.peermanager.piecepicker.PiecePicker;
 import com.biglybt.core.tag.*;
+import com.biglybt.core.torrent.TOTorrent;
 import com.biglybt.core.tracker.TrackerPeerSource;
 import com.biglybt.core.tracker.client.*;
 import com.biglybt.core.util.*;
@@ -246,7 +248,8 @@ public class TorrentGetMethods
 
 		DownloadManager core_download = PluginCoreUtils.unwrap(download);
 
-		PEPeerManager pm = core_download.getPeerManager();
+		PEPeerManager 	pm = core_download.getPeerManager();
+		DiskManager 	dm = core_download.getDiskManager();
 
 		DownloadStats stats = download.getStats();
 
@@ -257,6 +260,7 @@ public class TorrentGetMethods
 		int peers_from_us = 0;
 		int peers_to_us = 0;
 
+		
 		if (pm != null) {
 
 			List<PEPeer> peers = pm.getPeers();
@@ -273,6 +277,88 @@ public class TorrentGetMethods
 				if (pstats.getDataSendRate() > 0) {
 
 					peers_from_us++;
+				}
+			}
+		}
+		
+		// should be able to use dm_piece.getLength() but there's a bug in 2301_B17 and before that borks in the snapshot code
+		// hack start 
+		
+		TOTorrent to_torrent = PluginCoreUtils.unwrap(t);
+		
+		int piece_length	= (int)to_torrent.getPieceLength();
+
+		int piece_count		= to_torrent.getNumberOfPieces();
+
+		long total_length	= to_torrent.getSize();
+
+		long last_piece_length  	= (int) (total_length - ((long) (piece_count - 1) * (long)piece_length));
+		
+		// hack end
+		
+		long haveValid			= 0;
+		long desiredAvailable 	= 0;
+		
+		DiskManagerPiece[] dmPieces;
+		
+		if ( dm == null ){
+			
+			dmPieces = core_download.getDiskManagerPiecesSnapshot();
+						
+		}else{
+			
+			dmPieces = dm.getPieces();
+		}
+		
+		int[] availability;
+		
+		if ( pm == null ){
+			
+			availability = null;
+			
+		}else{
+		
+			PiecePicker piecePicker = pm.getPiecePicker();
+			
+			if ( piecePicker != null ){
+				
+				availability = piecePicker.getAvailability();
+				
+			}else{
+				
+				availability = null;
+			}
+		}
+							
+		for ( int i=0;i<dmPieces.length;i++){
+			
+			DiskManagerPiece piece = dmPieces[i];
+			
+			if ( piece.isSkipped()){
+				
+				continue;
+			}
+			
+			long pieceLength;
+			
+			if ( i == dmPieces.length - 1 ){
+				
+				pieceLength = last_piece_length;
+				
+			}else{
+				
+				pieceLength = piece_length;
+			}
+			
+			if ( piece.isDone()){
+				
+				haveValid += pieceLength;
+				
+			}else{
+				
+				if ( availability != null && availability[i] >= 1 ){
+				
+					desiredAvailable += pieceLength;
 				}
 			}
 		}
@@ -354,14 +440,15 @@ public class TorrentGetMethods
 
 					break;
 				case FIELD_TORRENT_DESIRED_AVAILABLE:
-					// RPC v0 TODO: stats.getRemainingAvailable() ?
+					
 					// desiredAvailable            | number                      | tr_stat
 					/**
 					 * Byte count of all the piece data we want and don't have yet,
 					 * but that a connected peer does have. [0...leftUntilDone] 
 					 */
-					value = core_download.getStats().getRemainingExcludingDND();
-
+					
+					value = desiredAvailable;
+					
 					break;
 				case FIELD_TORRENT_DATE_DONE:
 					// RPC v0
@@ -486,7 +573,8 @@ public class TorrentGetMethods
 					// haveValid                   | number                      | tr_stat
 					/** Byte count of all the checksum-verified data we have for this torrent.
 					 */
-					value = stats.getDownloaded();
+					
+					value = haveValid;
 
 					break;
 				case FIELD_TORRENT_HONORS_SESSION_LIMITS:
