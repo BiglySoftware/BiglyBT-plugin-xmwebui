@@ -18,6 +18,7 @@
 
 package com.aelitis.azureus.plugins.xmwebui;
 
+import java.text.DecimalFormat;
 import java.util.*;
 
 import com.biglybt.core.internat.MessageText;
@@ -28,6 +29,7 @@ import com.biglybt.util.MapUtils;
 
 import com.biglybt.pif.ui.UIInstance;
 import com.biglybt.pif.ui.config.*;
+import com.biglybt.pif.ui.config.ParameterValidator.ValidationInfo;
 
 import static com.aelitis.azureus.plugins.xmwebui.StaticUtils.addIfNotNull;
 
@@ -49,6 +51,377 @@ public class ConfigMethods
 		if (parameters != null) {
 			getParameters(parameters, result);
 		}
+	}
+
+	public static void set(Map<String, Object> args, Map<String, Object> result)
+			throws TextualException {
+		Map<String, Object> parameters = MapUtils.getMapMap(args, "parameters",
+				null);
+		if (parameters == null) {
+			throw new TextualException("No 'parameters' arg");
+		}
+		Map<String, Object> mapErrors = new HashMap<>();
+		Map<String, Object> mapSuccess = new HashMap<>();
+		result.put("success", mapSuccess);
+		result.put("errors", mapErrors);
+
+		List<String> listSections = new ArrayList<>();
+		for (String key : parameters.keySet()) {
+			Object val = parameters.get(key);
+			ParameterWithConfigSection pwcs = getParameter(key);
+			if (pwcs != null) {
+				if (!listSections.contains(pwcs.configSection)) {
+					listSections.add(pwcs.configSection);
+				}
+
+				Parameter parameter = pwcs.parameter;
+				boolean ok = false;
+				if (!parameter.isEnabled()) {
+					mapErrors.put(key, "Parameter is disabled");
+				} else if (parameter instanceof ColorParameter) {
+					mapErrors.put(key, "setting color not supported yet");
+				} else if (parameter instanceof BooleanParameter) {
+					ok = set((BooleanParameter) parameter, key, val, mapErrors);
+				} else if (parameter instanceof DirectoryParameter) {
+					ok = set((DirectoryParameter) parameter, key, val, mapErrors);
+				} else if (parameter instanceof FileParameterImpl) {
+					ok = set((FileParameterImpl) parameter, key, val, mapErrors);
+				} else if (parameter instanceof FloatParameter) {
+					ok = set((FloatParameter) parameter, key, val, mapErrors);
+				} else if (parameter instanceof IntListParameter) {
+					ok = set((IntListParameter) parameter, key, val, mapErrors);
+				} else if (parameter instanceof IntParameter) {
+					ok = set((IntParameter) parameter, key, val, mapErrors);
+				} else if (parameter instanceof PasswordParameter) {
+					ok = set((PasswordParameter) parameter, key, val, mapErrors);
+				} else if (parameter instanceof StringListParameter) {
+					ok = set((StringListParameter) parameter, key, val, mapErrors);
+				} else if (parameter instanceof StringParameterImpl) {
+					ok = set((StringParameterImpl) parameter, key, val, mapErrors);
+				}
+
+				if (ok) {
+					mapSuccess.put(key,
+							getParamAsMap(parameter, new ParamGroupInfo(), new Stack<>()));
+				}
+			}
+		}
+		
+		getSections(listSections, Collections.emptyMap(), result);
+	}
+
+	private static boolean set(StringParameterImpl parameter, String key,
+			Object val, Map<String, Object> mapErrors) {
+		ValidationInfo validate = validate(parameter, val);
+		if (!validate.valid) {
+			mapErrors.put(key, validate.info);
+			return false;
+		}
+		parameter.setValue((String) val);
+		return true;
+	}
+
+	private static boolean set(StringListParameter parameter, String key,
+			Object val, Map<String, Object> mapErrors) {
+		ValidationInfo validate = validate(parameter, val);
+		if (!validate.valid) {
+			mapErrors.put(key, validate.info);
+			return false;
+		}
+		parameter.setValue((String) val);
+		return true;
+	}
+
+	private static boolean set(PasswordParameter parameter, String key,
+			Object val, Map<String, Object> mapErrors) {
+		ValidationInfo validate = validate(parameter, val);
+		if (!validate.valid) {
+			mapErrors.put(key, validate.info);
+			return false;
+		}
+		parameter.setValue((String) val);
+		return true;
+	}
+
+	private static boolean set(IntListParameter parameter, String key, Object val,
+			Map<String, Object> mapErrors) {
+		ValidationInfo validate = validate(parameter, val);
+		if (!validate.valid) {
+			mapErrors.put(key, validate.info);
+			return false;
+		}
+		parameter.setValue(((Number) val).intValue());
+		return true;
+	}
+
+	private static boolean set(IntParameter parameter, String key, Object val,
+			Map<String, Object> mapErrors) {
+		ValidationInfo validate = validate(parameter, val);
+		if (!validate.valid) {
+			mapErrors.put(key, validate.info);
+			return false;
+		}
+		parameter.setValue(((Number) val).intValue());
+		return true;
+	}
+
+	private static boolean set(FileParameterImpl parameter, String key,
+			Object val, Map<String, Object> mapErrors) {
+		ValidationInfo validate = validate(parameter, val);
+		if (!validate.valid) {
+			mapErrors.put(key, validate.info);
+			return false;
+		}
+		parameter.setFileName((String) val);
+		return true;
+	}
+
+	private static boolean set(DirectoryParameter parameter, String key,
+			Object val, Map<String, Object> mapErrors) {
+		ValidationInfo validate = validate(parameter, val);
+		if (!validate.valid) {
+			mapErrors.put(key, validate.info);
+			return false;
+		}
+		parameter.setValue((String) val);
+		return true;
+	}
+
+	private static boolean set(FloatParameter parameter, String key, Object val,
+			Map<String, Object> mapErrors) {
+		ValidationInfo validate = validate(parameter, val);
+		if (!validate.valid) {
+			mapErrors.put(key, validate.info);
+			return false;
+		}
+		parameter.setValue(((Number) val).floatValue());
+		return true;
+	}
+
+	private static boolean set(BooleanParameter parameter, String key, Object val,
+			Map<String, Object> mapErrors) {
+		ValidationInfo validate = validate(parameter, val);
+		if (!validate.valid) {
+			mapErrors.put(key, validate.info);
+			return false;
+		}
+		parameter.setValue(((Boolean) val).booleanValue());
+		return true;
+	}
+
+	private static ValidationInfo validate(StringParameterImpl parameter,
+			Object newValueObject) {
+		if (!(newValueObject instanceof String)) {
+			return new ValidationInfo(false, "Parameter value must be String");
+		}
+		String newValue = (String) newValueObject;
+
+		int textLimit = parameter.getTextLimit();
+		if (textLimit > 0 && newValue.length() > textLimit) {
+			return new ValidationInfo(false, "Parameter Max Length is " + textLimit);
+		}
+
+		String validCharsString = parameter.getValidChars();
+		boolean validCharsCaseSensitive = parameter.isValidCharsCaseSensitive();
+
+		if (validCharsString != null && validCharsString.length() > 0) {
+			char[] validChars = new char[validCharsString.length()];
+			validCharsString.getChars(0, validCharsString.length(), validChars, 0);
+			Arrays.sort(validChars);
+
+			int len = newValue.length();
+			for (int i = 0; i < len; i++) {
+				char c = newValue.charAt(i);
+				if ((Arrays.binarySearch(validChars, c) < 0)
+						|| (!validCharsCaseSensitive && (Arrays.binarySearch(validChars,
+								Character.toLowerCase(c)) < 0))) {
+					return new ValidationInfo(false,
+							"Value contains invalid characters. Not allowed: "
+									+ validCharsString);
+				}
+			}
+		}
+
+		if (parameter instanceof ParameterImpl) {
+			return ((ParameterImpl) parameter).validate(newValue);
+		}
+		return new ValidationInfo(true);
+	}
+
+	private static ValidationInfo validate(StringListParameter parameter,
+			Object newValueObject) {
+		if (!(newValueObject instanceof Number)) {
+			return new ValidationInfo(false, "Parameter value must be Number");
+		}
+		int newValue = ((Number) newValueObject).intValue();
+
+		String[] values = parameter.getValues();
+		boolean found = false;
+		for (String value : values) {
+			if (value != null && value.equals(newValue)) {
+				found = true;
+				break;
+			}
+		}
+		if (!found) {
+			return new ValidationInfo(false, "Value not in list");
+		}
+
+		if (parameter instanceof ParameterImpl) {
+			return ((ParameterImpl) parameter).validate(newValue);
+		}
+		return new ValidationInfo(true);
+	}
+
+	private static ValidationInfo validate(PasswordParameter parameter,
+			Object newValueObject) {
+		if (!(newValueObject instanceof String)) {
+			return new ValidationInfo(false, "Parameter value must be String");
+		}
+		String newValue = (String) newValueObject;
+
+		if (parameter instanceof ParameterImpl) {
+			return ((ParameterImpl) parameter).validate(newValue);
+		}
+		return new ValidationInfo(true);
+	}
+
+	private static ValidationInfo validate(IntParameter parameter,
+			Object newValueObject) {
+		if (!(newValueObject instanceof Number)) {
+			return new ValidationInfo(false, "Parameter value must be Number");
+		}
+
+		int newValue = ((Number) newValueObject).intValue();
+
+		// Note: ParameterImpl.validate doesn't validate ranges, that code is still
+		//       in IntSWTParameter :(  Copied below
+
+		if (parameter.isLimited()) {
+			int iMaxValue = parameter.getMaxValue();
+			if (iMaxValue != Integer.MAX_VALUE && newValue > iMaxValue) {
+				return new ValidationInfo(false, "Max " + iMaxValue);
+			}
+
+			int iMinValue = parameter.getMinValue();
+			if (iMinValue != Integer.MIN_VALUE && newValue < iMinValue) {
+				return new ValidationInfo(false, "Min " + iMinValue);
+			}
+		}
+
+		if (parameter instanceof ParameterImpl) {
+			return ((ParameterImpl) parameter).validate(newValue);
+		}
+		return new ValidationInfo(true);
+	}
+
+	private static ValidationInfo validate(IntListParameter parameter,
+			Object newValueObject) {
+		if (!(newValueObject instanceof Number)) {
+			return new ValidationInfo(false, "Parameter value must be Number");
+		}
+		int newValue = ((Number) newValueObject).intValue();
+
+		int[] values = parameter.getValues();
+		boolean found = false;
+		for (int value : values) {
+			if (value == newValue) {
+				found = true;
+				break;
+			}
+		}
+		if (!found) {
+			return new ValidationInfo(false, "Value not in list");
+		}
+
+		if (parameter instanceof ParameterImpl) {
+			return ((ParameterImpl) parameter).validate(newValue);
+		}
+		return new ValidationInfo(true);
+	}
+
+	private static ValidationInfo validate(DirectoryParameter parameter,
+			Object newValueObject) {
+		if (!(newValueObject instanceof String)) {
+			return new ValidationInfo(false, "Parameter value must be String");
+		}
+		String newValue = (String) newValueObject;
+
+		if (parameter instanceof ParameterImpl) {
+			return ((ParameterImpl) parameter).validate(newValue);
+		}
+		return new ValidationInfo(true);
+	}
+
+	private static ValidationInfo validate(FileParameter parameter,
+			Object newValueObject) {
+		if (!(newValueObject instanceof String)) {
+			return new ValidationInfo(false, "Parameter value must be String");
+		}
+		String newValue = (String) newValueObject;
+
+		if (parameter instanceof ParameterImpl) {
+			return ((ParameterImpl) parameter).validate(newValue);
+		}
+		return new ValidationInfo(true);
+	}
+
+	private static ValidationInfo validate(FloatParameter parameter,
+			Object newValueObject) {
+		if (!(newValueObject instanceof Number)) {
+			return new ValidationInfo(false, "Parameter value must be Number");
+		}
+
+		float newValue = ((Number) newValueObject).floatValue();
+
+		// Note: ParameterImpl.validate doesn't validate ranges, that code is still
+		//       in FloatSWTParameter :(  Copied below
+
+		if (!parameter.isAllowZero() && newValue == 0) {
+			return new ValidationInfo(false,
+					MessageText.getString("warning.zero.not.allowed"));
+		}
+		float fMinValue = parameter.getMinValue();
+		if (newValue < fMinValue) {
+			return new ValidationInfo(false,
+					MessageText.getString("warning.min", new String[] {
+						getDecimalFormat(parameter).format(fMinValue)
+					}));
+		}
+		float fMaxValue = parameter.getMaxValue();
+		if (newValue > fMaxValue && fMaxValue > -1) {
+			return new ValidationInfo(false,
+					MessageText.getString("warning.max", new String[] {
+						getDecimalFormat(parameter).format(fMaxValue)
+					}));
+		}
+
+		if (parameter instanceof ParameterImpl) {
+			return ((ParameterImpl) parameter).validate(newValue);
+		}
+		return new ValidationInfo(true);
+	}
+
+	private static ValidationInfo validate(BooleanParameter parameter,
+			Object newValueObject) {
+		if (!(newValueObject instanceof Boolean)) {
+			return new ValidationInfo(false, "Parameter value must be Boolean");
+		}
+		boolean newValue = (Boolean) newValueObject;
+
+		if (parameter instanceof ParameterImpl) {
+			return ((ParameterImpl) parameter).validate(newValue);
+		}
+		return new ValidationInfo(true);
+	}
+
+	private static DecimalFormat getDecimalFormat(FloatParameter parameter) {
+		int digitsAfterDecimal = parameter.getNumDigitsAfterDecimal();
+		DecimalFormat df = new DecimalFormat(
+				digitsAfterDecimal > 0 ? "0.000000000000" : "0");
+		df.setGroupingUsed(false);
+		df.setMaximumFractionDigits(digitsAfterDecimal);
+		return df;
 	}
 
 	private static String getFriendlyConfigSectionID(String id) {
@@ -148,14 +521,7 @@ public class ConfigMethods
 				return out;
 			}
 
-			String paramType = param.getClass().getSimpleName();
-			if (paramType.endsWith("Impl")) {
-				if (paramType.endsWith("ParameterImpl")) {
-					paramType = paramType.substring(0, paramType.length() - 13);
-				} else {
-					paramType = paramType.substring(0, paramType.length() - 4);
-				}
-			}
+			String paramType = getParamType(param);
 			out.put("type", paramType);
 
 			if (key != null) {
@@ -343,6 +709,18 @@ public class ConfigMethods
 		return out;
 	}
 
+	private static String getParamType(Parameter param) {
+		String paramType = param.getClass().getSimpleName();
+		if (paramType.endsWith("Impl")) {
+			if (paramType.endsWith("ParameterImpl")) {
+				paramType = paramType.substring(0, paramType.length() - 13);
+			} else {
+				paramType = paramType.substring(0, paramType.length() - 4);
+			}
+		}
+		return paramType;
+	}
+
 	private static ParameterWithConfigSection getParameter(String configKey) {
 		List<BaseConfigSection> sections = ConfigSections.getInstance().getAllConfigSections(
 				false);
@@ -356,7 +734,8 @@ public class ConfigMethods
 
 				ParameterImpl pluginParam = section.getPluginParam(configKey);
 				if (pluginParam != null) {
-					return new ParameterWithConfigSection(section, pluginParam);
+					return new ParameterWithConfigSection(section.getConfigSectionID(),
+							pluginParam);
 				}
 			} finally {
 				if (needsBuild) {
@@ -530,7 +909,8 @@ public class ConfigMethods
 						section.getConfigSectionID());
 
 				if (sectionID.equals(requestedSection)) {
-					Map<String, Object> sectionAsMap = getSectionAsMap(section, maxUserMode);
+					Map<String, Object> sectionAsMap = getSectionAsMap(section,
+							maxUserMode);
 					jsonSection.putAll(sectionAsMap);
 				} else {
 					String sectionParentID = getFriendlyConfigSectionID(
@@ -625,11 +1005,11 @@ public class ConfigMethods
 
 	private static final class ParameterWithConfigSection
 	{
-		public BaseConfigSection configSection;
+		public String configSection;
 
 		public Parameter parameter;
 
-		public ParameterWithConfigSection(BaseConfigSection configSection,
+		public ParameterWithConfigSection(String configSection,
 				Parameter parameter) {
 			this.configSection = configSection;
 			this.parameter = parameter;

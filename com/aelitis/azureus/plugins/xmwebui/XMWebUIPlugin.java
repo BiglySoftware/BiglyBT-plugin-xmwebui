@@ -1754,9 +1754,13 @@ XMWebUIPlugin
 					processI18nGetText(args, result);
 					
 					break;
-					
+
 				case "config-get":
 					ConfigMethods.get(args, result);
+					break;
+
+				case "config-set":
+					ConfigMethods.set(args, result);
 					break;
 
 				default:
