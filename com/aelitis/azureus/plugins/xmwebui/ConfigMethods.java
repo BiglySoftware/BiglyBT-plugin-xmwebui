@@ -101,12 +101,14 @@ public class ConfigMethods
 				}
 
 				if (ok) {
-					mapSuccess.put(key,
-							getParamAsMap(parameter, new ParamGroupInfo(), new Stack<>()));
+					Map<String, Object> paramAsMap = getParamAsMap(parameter,
+							new ParamGroupInfo(), new Stack<>());
+					paramAsMap.put("section-id", pwcs.configSection);
+					mapSuccess.put(key, paramAsMap);
 				}
 			}
 		}
-		
+
 		getSections(listSections, Collections.emptyMap(), result);
 	}
 
