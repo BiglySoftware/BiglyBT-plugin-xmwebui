@@ -280,7 +280,11 @@ public class TorrentGetMethods
 				}
 			}
 		}
-		
+
+		long haveValid			= 0;
+		long desiredAvailable 	= 0;
+
+		if (fields.contains(FIELD_TORRENT_DESIRED_AVAILABLE) || fields.contains(FIELD_TORRENT_HAVE_VALID)) {
 		// should be able to use dm_piece.getLength() but there's a bug in 2301_B17 and before that borks in the snapshot code
 		// hack start 
 		
@@ -295,9 +299,6 @@ public class TorrentGetMethods
 		long last_piece_length  	= (int) (total_length - ((long) (piece_count - 1) * (long)piece_length));
 		
 		// hack end
-		
-		long haveValid			= 0;
-		long desiredAvailable 	= 0;
 		
 		DiskManagerPiece[] dmPieces;
 		
@@ -361,6 +362,7 @@ public class TorrentGetMethods
 					desiredAvailable += pieceLength;
 				}
 			}
+		}
 		}
 
 		//noinspection unchecked
