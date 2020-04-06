@@ -259,112 +259,106 @@ public class TorrentGetMethods
 
 		int peers_from_us = 0;
 		int peers_to_us = 0;
-
+		 
 		
-		if (pm != null) {
+		if ( fields.contains( "peersGettingFromUs" ) || fields.contains( "peersSendingToUs" )) {
 
-			List<PEPeer> peers = pm.getPeers();
-
-			for (PEPeer peer : peers) {
-
-				PEPeerStats pstats = peer.getStats();
-
-				if (pstats.getDataReceiveRate() > 0) {
-
-					peers_to_us++;
-				}
-
-				if (pstats.getDataSendRate() > 0) {
-
-					peers_from_us++;
+			if (pm != null) {
+	
+				List<PEPeer> peers = pm.getPeers();
+	
+				for (PEPeer peer : peers) {
+	
+					PEPeerStats pstats = peer.getStats();
+	
+					if (pstats.getDataReceiveRate() > 0) {
+	
+						peers_to_us++;
+					}
+	
+					if (pstats.getDataSendRate() > 0) {
+	
+						peers_from_us++;
+					}
 				}
 			}
 		}
-
+				
 		long haveValid			= 0;
 		long desiredAvailable 	= 0;
+		
+		if ( fields.contains(FIELD_TORRENT_DESIRED_AVAILABLE) || fields.contains(FIELD_TORRENT_HAVE_VALID )) {
 
-		if (fields.contains(FIELD_TORRENT_DESIRED_AVAILABLE) || fields.contains(FIELD_TORRENT_HAVE_VALID)) {
-		// should be able to use dm_piece.getLength() but there's a bug in 2301_B17 and before that borks in the snapshot code
-		// hack start 
-		
-		TOTorrent to_torrent = PluginCoreUtils.unwrap(t);
-		
-		int piece_length	= (int)to_torrent.getPieceLength();
-
-		int piece_count		= to_torrent.getNumberOfPieces();
-
-		long total_length	= to_torrent.getSize();
-
-		long last_piece_length  	= (int) (total_length - ((long) (piece_count - 1) * (long)piece_length));
-		
-		// hack end
-		
-		DiskManagerPiece[] dmPieces;
-		
-		if ( dm == null ){
+			DiskManagerPiece[] dmPieces_maybe_null;
 			
-			dmPieces = core_download.getDiskManagerPiecesSnapshot();
+			if ( dm == null ){
+				
+				// boo, too expensive to do this (user reporting 100% CPU, meh
+				
+				// dmPieces_maybe_null = core_download.getDiskManagerPiecesSnapshot();
+					
+				dmPieces_maybe_null = null;
+				
+			}else{
+				
+				dmPieces_maybe_null = dm.getPieces();
+			}
+			
+				
+			if ( dmPieces_maybe_null == null ){
+				
+				DownloadManagerStats core_stats = core_download.getStats();
+				
+				haveValid = Math.max( 0, core_stats.getSizeExcludingDND() - core_stats.getRemainingExcludingDND());
 						
-		}else{
-			
-			dmPieces = dm.getPieces();
-		}
-		
-		int[] availability;
-		
-		if ( pm == null ){
-			
-			availability = null;
-			
-		}else{
-		
-			PiecePicker piecePicker = pm.getPiecePicker();
-			
-			if ( piecePicker != null ){
-				
-				availability = piecePicker.getAvailability();
-				
 			}else{
 				
-				availability = null;
-			}
-		}
-							
-		for ( int i=0;i<dmPieces.length;i++){
-			
-			DiskManagerPiece piece = dmPieces[i];
-			
-			if ( piece.isSkipped()){
+				int[] availability;
 				
-				continue;
-			}
-			
-			long pieceLength;
-			
-			if ( i == dmPieces.length - 1 ){
+				if ( pm == null ){
+					
+					availability = null;
+					
+				}else{
 				
-				pieceLength = last_piece_length;
-				
-			}else{
-				
-				pieceLength = piece_length;
-			}
-			
-			if ( piece.isDone()){
-				
-				haveValid += pieceLength;
-				
-			}else{
-				
-				if ( availability != null && availability[i] >= 1 ){
-				
-					desiredAvailable += pieceLength;
+					PiecePicker piecePicker = pm.getPiecePicker();
+					
+					if ( piecePicker != null ){
+						
+						availability = piecePicker.getAvailability();
+						
+					}else{
+						
+						availability = null;
+					}
+				}
+	
+				for ( int i=0;i<dmPieces_maybe_null.length;i++){
+					
+					DiskManagerPiece piece = dmPieces_maybe_null[i];
+					
+					if ( piece.isSkipped()){
+						
+						continue;
+					}
+					
+					long pieceLength = piece.getLength();
+					
+					if ( piece.isDone()){
+						
+						haveValid += pieceLength;
+						
+					}else{
+						
+						if ( availability != null && availability[i] >= 1 ){
+						
+							desiredAvailable += pieceLength;
+						}
+					}
 				}
 			}
 		}
-		}
-
+		
 		//noinspection unchecked
 		List<String> peer_fields = (List<String>) args.get(
 				ARG_TORRENT_GET_PEER_FIELDS);
