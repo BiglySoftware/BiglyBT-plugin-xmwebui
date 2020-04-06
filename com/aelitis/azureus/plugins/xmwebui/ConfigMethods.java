@@ -21,10 +21,10 @@ package com.aelitis.azureus.plugins.xmwebui;
 import java.text.DecimalFormat;
 import java.util.*;
 
+import com.biglybt.core.config.COConfigurationManager;
 import com.biglybt.core.internat.MessageText;
 import com.biglybt.pifimpl.local.ui.config.*;
 import com.biglybt.ui.config.*;
-import com.biglybt.ui.swt.Utils;
 import com.biglybt.util.MapUtils;
 
 import com.biglybt.pif.ui.UIInstance;
@@ -886,9 +886,9 @@ public class ConfigMethods
 
 	static void getSections(List<String> sections, Map<String, Object> args,
 			Map<String, Object> result) {
+		int usermode = COConfigurationManager.getIntParameter("User Mode");
 
-		int maxUserMode = MapUtils.getMapInt(args, "max-user-mode",
-				Utils.getUserMode());
+		int maxUserMode = MapUtils.getMapInt(args, "max-user-mode", usermode);
 		if (sections == null || sections.size() == 0) {
 			sections = new ArrayList<>();
 			sections.add("root");
@@ -896,7 +896,7 @@ public class ConfigMethods
 		List<BaseConfigSection> allConfigSections = ConfigSections.getInstance().getAllConfigSections(
 				true);
 
-		result.put("user-mode", Utils.getUserMode());
+		result.put("user-mode", usermode);
 
 		Map<String, Object> mapSections = new HashMap<>();
 		result.put("sections", mapSections);
