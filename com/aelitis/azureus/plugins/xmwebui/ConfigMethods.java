@@ -35,9 +35,17 @@ import static com.aelitis.azureus.plugins.xmwebui.StaticUtils.addIfNotNull;
 
 public class ConfigMethods
 {
+	private static final boolean OUTPUT_STRINGS = false;
+
 	static ConfigSections instance;
 
-	public static void get(Map<String, Object> args, Map<String, Object> result) {
+	private final XMWebUIPlugin plugin;
+
+	public ConfigMethods(XMWebUIPlugin plugin) {
+		this.plugin = plugin;
+	}
+
+	public void get(Map<String, Object> args, Map<String, Object> result) {
 
 		//noinspection unchecked
 		List<String> sections = MapUtils.getMapList(args, "sections", null);
@@ -53,13 +61,78 @@ public class ConfigMethods
 		}
 	}
 
-	public static void set(Map<String, Object> args, Map<String, Object> result)
+	public void action(Map<String, Object> args, Map<String, Object> result)
+			throws TextualException {
+		String actionID = MapUtils.getMapString(args, "action-id", null);
+		if (actionID == null) {
+			throw new TextualException("No 'action-id' arg");
+		}
+		String sectionID = MapUtils.getMapString(args, "section-id", null);
+		if (sectionID == null) {
+			throw new TextualException("No 'section-id' arg");
+		}
+		List<BaseConfigSection> allConfigSections = ConfigSections.getInstance().getAllConfigSections(
+				false);
+		BaseConfigSection section = null;
+		for (BaseConfigSection configSection : allConfigSections) {
+			if (sectionID.equals(configSection.getConfigSectionID())) {
+				section = configSection;
+				break;
+			}
+		}
+		if (section == null) {
+			throw new TextualException("section-id does not exist");
+		}
+
+		boolean found = false;
+		boolean needsBuild = !section.isBuilt();
+		try {
+			if (needsBuild) {
+				section.build();
+				section.postBuild();
+			}
+
+			Parameter[] parameters = section.getParamArray();
+			for (Parameter parameter : parameters) {
+				if (parameter instanceof ActionParameter) {
+					String id = ((ActionParameter) parameter).getActionID();
+					if (actionID.equals(id) && (parameter instanceof ParameterImpl)) {
+						((ParameterImpl) parameter).fireParameterChanged();
+						found = true;
+						int usermode = COConfigurationManager.getIntParameter("User Mode");
+						section.deleteConfigSection();
+						section.build();
+						section.postBuild();
+						Map<String, Object> sectionAsMap = getSectionAsMap(section,
+								usermode);
+						result.put(sectionID, sectionAsMap);
+					}
+				}
+			}
+		} catch (Throwable t) {
+			plugin.log(actionID, t);
+		} finally {
+			if (needsBuild) {
+				section.deleteConfigSection();
+			}
+		}
+		if (!found) {
+			throw new TextualException(
+					"action-id of '" + actionID + "' not found in section '" + sectionID);
+		}
+		result.put("section-id", sectionID);
+		result.put("action-id", actionID);
+	}
+
+	public void set(Map<String, Object> args, Map<String, Object> result)
 			throws TextualException {
 		Map<String, Object> parameters = MapUtils.getMapMap(args, "parameters",
 				null);
 		if (parameters == null) {
 			throw new TextualException("No 'parameters' arg");
 		}
+		String sectionID = MapUtils.getMapString(args, "section-id", null);
+
 		Map<String, Object> mapErrors = new HashMap<>();
 		Map<String, Object> mapSuccess = new HashMap<>();
 		result.put("success", mapSuccess);
@@ -68,7 +141,7 @@ public class ConfigMethods
 		List<String> listSections = new ArrayList<>();
 		for (String key : parameters.keySet()) {
 			Object val = parameters.get(key);
-			ParameterWithConfigSection pwcs = getParameter(key);
+			ParameterWithConfigSection pwcs = getParameter(key, sectionID);
 			if (pwcs != null) {
 				if (!listSections.contains(pwcs.configSection)) {
 					listSections.add(pwcs.configSection);
@@ -207,7 +280,7 @@ public class ConfigMethods
 			mapErrors.put(key, validate.info);
 			return false;
 		}
-		parameter.setValue(((Boolean) val).booleanValue());
+		parameter.setValue((Boolean) val);
 		return true;
 	}
 
@@ -380,28 +453,53 @@ public class ConfigMethods
 		//       in FloatSWTParameter :(  Copied below
 
 		if (!parameter.isAllowZero() && newValue == 0) {
-			return new ValidationInfo(false,
-					MessageText.getString("warning.zero.not.allowed"));
+			return new ValidationInfo(false, getString("warning.zero.not.allowed"));
 		}
 		float fMinValue = parameter.getMinValue();
 		if (newValue < fMinValue) {
-			return new ValidationInfo(false,
-					MessageText.getString("warning.min", new String[] {
-						getDecimalFormat(parameter).format(fMinValue)
-					}));
+			return new ValidationInfo(false, getString("warning.min", new String[] {
+				getDecimalFormat(parameter).format(fMinValue)
+			}));
 		}
 		float fMaxValue = parameter.getMaxValue();
 		if (newValue > fMaxValue && fMaxValue > -1) {
-			return new ValidationInfo(false,
-					MessageText.getString("warning.max", new String[] {
-						getDecimalFormat(parameter).format(fMaxValue)
-					}));
+			return new ValidationInfo(false, getString("warning.max", new String[] {
+				getDecimalFormat(parameter).format(fMaxValue)
+			}));
 		}
 
 		if (parameter instanceof ParameterImpl) {
 			return ((ParameterImpl) parameter).validate(newValue);
 		}
 		return new ValidationInfo(true);
+	}
+
+	private static String getString(String key, String[] params) {
+		String string = MessageText.getString(key, params);
+		if (OUTPUT_STRINGS && !(key.startsWith("!") && key.endsWith("!"))) {
+			if (params.length == 0) {
+				System.out.println(key + "=" + toEscape(string));
+			} else {
+				System.out.println(key + "=" + toEscape(MessageText.getString(key)));
+			}
+		}
+		return string;
+	}
+
+	private static String getString(String key) {
+		String string = MessageText.getString(key);
+		if (OUTPUT_STRINGS && !(key.startsWith("!") && key.endsWith("!"))) {
+			System.out.println(key + "=" + toEscape(string));
+		}
+		return string;
+	}
+
+	private static String getString(String key, String def) {
+		String string = MessageText.getString(key, def);
+		if (OUTPUT_STRINGS && string != null) {
+			System.out.println(key + "=" + toEscape(string));
+		}
+		return string;
 	}
 
 	private static ValidationInfo validate(BooleanParameter parameter,
@@ -466,13 +564,16 @@ public class ConfigMethods
 			}
 
 			if (param.isVisible() && rid != null) {
-				String title = MessageText.getString(rid);
+				String title = getString(rid);
 
 				out.put("type", "Group");
 				out.put("title", title);
 				out.put("parameters", pgInfo.list);
 				out.put("id", rid);
-				out.put("col-hint", ((ParameterGroupImpl) param).getNumberColumns());
+				int numberColumns = ((ParameterGroupImpl) param).getNumberColumns();
+				if (numberColumns > 1) {
+					out.put("col-hint", numberColumns);
+				}
 				addIfNotNull(out, "key", param.getConfigKeyName());
 				addIfNotNull(out, "ref-id", ((ParameterImpl) param).getReferenceID());
 				list.add(out);
@@ -551,7 +652,7 @@ public class ConfigMethods
 
 				String linkTextKey = ((HyperlinkParameter) param).getLinkTextKey();
 				if (linkTextKey != null && !linkTextKey.isEmpty()) {
-					String linkText = MessageText.getString(linkTextKey);
+					String linkText = getString(linkTextKey);
 					if (!linkText.equals(hyperlink)) {
 						out.put("hyperlink-title", linkText);
 					}
@@ -561,7 +662,7 @@ public class ConfigMethods
 			} else if (param instanceof ActionParameter) {
 				canSet = false;
 				String actionResource = ((ActionParameter) param).getActionResource();
-				out.put("text", MessageText.getString(actionResource));
+				out.put("text", getString(actionResource));
 				out.put("action-id", ((ActionParameter) param).getActionID());
 				int style = ((ActionParameter) param).getStyle();
 				out.put("style", style == ActionParameter.STYLE_BUTTON ? "Button"
@@ -571,16 +672,16 @@ public class ConfigMethods
 			if (param instanceof DirectoryParameterImpl) {
 				String keyDialogTitle = ((DirectoryParameterImpl) param).getKeyDialogTitle();
 				if (keyDialogTitle != null) {
-					out.put("dialog-title", MessageText.getString(keyDialogTitle));
+					out.put("dialog-title", getString(keyDialogTitle));
 				}
 				String keyDialogMessage = ((DirectoryParameterImpl) param).getKeyDialogMessage();
 				if (keyDialogMessage != null) {
-					out.put("dialog-message", MessageText.getString(keyDialogMessage));
+					out.put("dialog-message", getString(keyDialogMessage));
 				}
 			} else if (param instanceof FileParameterImpl) {
 				String keyDialogTitle = ((FileParameterImpl) param).getKeyDialogTitle();
 				if (keyDialogTitle != null) {
-					out.put("dialog-title", MessageText.getString(keyDialogTitle));
+					out.put("dialog-title", getString(keyDialogTitle));
 				}
 				addIfNotNull(out, "val-hint",
 						((FileParameterImpl) param).getFileNameHint());
@@ -659,22 +760,27 @@ public class ConfigMethods
 			if (param instanceof ParameterWithHint) {
 				String hintKey = ((ParameterWithHint) param).getHintKey();
 				if (hintKey != null) {
-					out.put("hint", MessageText.getString(hintKey));
+					out.put("hint", getString(hintKey));
 				}
 			}
 
 			if (param instanceof ParameterWithSuffix) {
 				String suffixLabelKey = ((ParameterWithSuffix) param).getSuffixLabelKey();
 				if (suffixLabelKey != null) {
-					out.put("label-suffix", MessageText.getString(suffixLabelKey));
+					out.put("label-suffix", getString(suffixLabelKey));
 				}
 			}
 
 			String label = param.getLabelText();
+			if (OUTPUT_STRINGS) {
+				String labelKey = param.getLabelKey();
+				if (label != null && !label.isEmpty() && !labelKey.startsWith("!")) {
+					System.out.println(labelKey + "=" + toEscape(label));
+				}
+			}
 			if (label != null) {
 				out.put("label", label);
-				String tt = MessageText.getString(param.getLabelKey() + ".tooltip",
-						(String) null);
+				String tt = getString(param.getLabelKey() + ".tooltip", (String) null);
 				if (tt != null) {
 					out.put("label-tooltip", tt);
 				}
@@ -729,10 +835,15 @@ public class ConfigMethods
 		return paramType;
 	}
 
-	private static ParameterWithConfigSection getParameter(String configKey) {
+	private ParameterWithConfigSection getParameter(String configKey,
+			String optionalSectionID) {
 		List<BaseConfigSection> sections = ConfigSections.getInstance().getAllConfigSections(
 				false);
 		for (BaseConfigSection section : sections) {
+			if (optionalSectionID != null
+					&& !optionalSectionID.equals(section.getConfigSectionID())) {
+				continue;
+			}
 			boolean needsBuild = !section.isBuilt();
 			try {
 				if (needsBuild) {
@@ -745,6 +856,8 @@ public class ConfigMethods
 					return new ParameterWithConfigSection(section.getConfigSectionID(),
 							pluginParam);
 				}
+			} catch (Throwable t) {
+				plugin.log(configKey, t);
 			} finally {
 				if (needsBuild) {
 					section.deleteConfigSection();
@@ -754,8 +867,7 @@ public class ConfigMethods
 		return null;
 	}
 
-	static void getParameters(List<String> parameters,
-			Map<String, Object> result) {
+	void getParameters(List<String> parameters, Map<String, Object> result) {
 		Collections.sort(parameters);
 		int numParametersLeft = parameters.size();
 		List<BaseConfigSection> allConfigSections = ConfigSections.getInstance().getAllConfigSections(
@@ -769,12 +881,12 @@ public class ConfigMethods
 			ParamGroupInfo pgInfo = new ParamGroupInfo();
 
 			boolean needsBuild = !section.isBuilt();
-			if (needsBuild) {
-				section.build();
-				section.postBuild();
-			}
-
 			try {
+				if (needsBuild) {
+					section.build();
+					section.postBuild();
+				}
+
 				Parameter[] paramArray = section.getParamArray();
 				List<Parameter> params = new ArrayList<>();
 				for (Parameter param : paramArray) {
@@ -824,6 +936,8 @@ public class ConfigMethods
 					}
 				}
 
+			} catch (Throwable t) {
+				plugin.log("build", t);
 			} finally {
 
 				if (needsBuild) {
@@ -834,10 +948,14 @@ public class ConfigMethods
 
 	}
 
-	static Map<String, Object> getSectionAsMap(BaseConfigSection section,
+	Map<String, Object> getSectionAsMap(BaseConfigSection section,
 			int maxUserModeRequested) {
 		Map<String, Object> out = new HashMap<>();
-		out.put("name", MessageText.getString(section.getSectionNameKey()));
+		if (OUTPUT_STRINGS) {
+			out.put("name", MessageText.getString(section.getSectionNameKey()));
+		} else {
+			out.put("name", getString(section.getSectionNameKey()));
+		}
 		out.put("id", getFriendlyConfigSectionID(section.getConfigSectionID()));
 		out.put("parent-id",
 				getFriendlyConfigSectionID(section.getParentSectionID()));
@@ -850,41 +968,46 @@ public class ConfigMethods
 
 		if (maxUserModeRequested >= 0) {
 			boolean needsBuild = !section.isBuilt();
-			if (needsBuild) {
-				section.build();
-				section.postBuild();
-			}
-
-			Parameter[] paramArray = section.getParamArray();
-			List<Parameter> params = new ArrayList<>();
-			for (Parameter param : paramArray) {
-				if (param instanceof ParameterGroupImpl) {
-					params.add(params.size() - ((ParameterGroupImpl) param).size(true),
-							param);
-				} else {
-					params.add(param);
+			try {
+				if (needsBuild) {
+					section.build();
+					section.postBuild();
 				}
-			}
 
-			ParamGroupInfo pgInfo = new ParamGroupInfo();
-			List<Map<String, Object>> jsonConfigParams = pgInfo.list;
-			out.put("parameters", jsonConfigParams);
+				Parameter[] paramArray = section.getParamArray();
+				List<Parameter> params = new ArrayList<>();
+				for (Parameter param : paramArray) {
+					if (param instanceof ParameterGroupImpl) {
+						params.add(params.size() - ((ParameterGroupImpl) param).size(true),
+								param);
+					} else {
+						params.add(param);
+					}
+				}
 
-			Stack<ParamGroupInfo> pgInfoStack = new Stack<>();
+				ParamGroupInfo pgInfo = new ParamGroupInfo();
+				List<Map<String, Object>> jsonConfigParams = pgInfo.list;
+				out.put("parameters", jsonConfigParams);
 
-			for (Parameter param : params) {
-				getParamAsMap(param, pgInfo, pgInfoStack, maxUserModeRequested);
-			}
+				Stack<ParamGroupInfo> pgInfoStack = new Stack<>();
 
-			if (needsBuild) {
-				section.deleteConfigSection();
+				for (Parameter param : params) {
+					getParamAsMap(param, pgInfo, pgInfoStack, maxUserModeRequested);
+				}
+
+			} catch (Throwable t) {
+				plugin.log("build", t);
+			} finally {
+				if (needsBuild) {
+					section.deleteConfigSection();
+				}
 			}
 		}
 
 		return out;
 	}
 
-	static void getSections(List<String> sections, Map<String, Object> args,
+	void getSections(List<String> sections, Map<String, Object> args,
 			Map<String, Object> result) {
 		int usermode = COConfigurationManager.getIntParameter("User Mode");
 
@@ -1114,5 +1237,29 @@ public class ConfigMethods
 			return configSections;
 		}
 
+	}
+
+	private static String toEscape(String str) {
+		StringBuilder sb = new StringBuilder();
+		char[] charArr = str.toCharArray();
+		for (char c : charArr) {
+			if (c == '\n')
+				sb.append("\\n");
+			else if (c == '\t')
+				sb.append("\\t");
+			else if (c < 128 && c != '\\')
+				sb.append(c);
+			else {
+				sb.append(toEscape(c));
+			}
+		}
+		return sb.toString();
+	}
+
+	private static final String zeros = "000";
+
+	private static String toEscape(char c) {
+		String body = Integer.toHexString(c);
+		return ("\\u" + zeros.substring(0, 4 - body.length()) + body);
 	}
 }

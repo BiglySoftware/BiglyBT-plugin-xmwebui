@@ -83,7 +83,8 @@ public class SessionMethods
 			"field:torrent-get:isForced",
 			"field:torrent-get:files:eta",
 			"method:config-get",
-			"method:config-set"
+			"method:config-set", 
+			"method:config-action"
 		);
 		// @formatter:on
 	}

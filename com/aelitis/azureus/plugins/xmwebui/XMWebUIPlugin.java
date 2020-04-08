@@ -133,6 +133,7 @@ XMWebUIPlugin
 
 	private TagMethods tagMethods;
 	private TorrentMethods torrentMethods;
+	private ConfigMethods configMethods;
 
 	private static Download
 	destubbify(
@@ -1756,11 +1757,15 @@ XMWebUIPlugin
 					break;
 
 				case "config-get":
-					ConfigMethods.get(args, result);
+					getConfigMethods().get(args, result);
 					break;
 
 				case "config-set":
-					ConfigMethods.set(args, result);
+					getConfigMethods().set(args, result);
+					break;
+
+				case "config-action":
+					getConfigMethods().action(args, result);
 					break;
 
 				default:
@@ -1822,6 +1827,13 @@ XMWebUIPlugin
 			tagMethods = new TagMethods();
 		}
 		return tagMethods;
+	}
+	
+	private synchronized ConfigMethods getConfigMethods() {
+		if (configMethods == null) {
+			configMethods = new ConfigMethods(this);
+		}
+		return configMethods;
 	}
 
 	private static void method_Vuze_Plugin_Get_List(Map args, Map result) {
