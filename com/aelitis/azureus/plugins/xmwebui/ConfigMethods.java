@@ -293,7 +293,11 @@ public class ConfigMethods
 
 		int textLimit = parameter.getTextLimit();
 		if (textLimit > 0 && newValue.length() > textLimit) {
-			return new ValidationInfo(false, "Parameter Max Length is " + textLimit);
+			return new ValidationInfo(false,
+					MessageText.getString("xmwebui.param.validation.maxlen",
+							new String[] {
+								"" + textLimit
+							}));
 		}
 
 		String validCharsString = parameter.getValidChars();
@@ -311,8 +315,10 @@ public class ConfigMethods
 						|| (!validCharsCaseSensitive && (Arrays.binarySearch(validChars,
 								Character.toLowerCase(c)) < 0))) {
 					return new ValidationInfo(false,
-							"Value contains invalid characters. Not allowed: "
-									+ validCharsString);
+							MessageText.getString("xmwebui.param.validation.invalidchars",
+									new String[] {
+										validCharsString
+									}));
 				}
 			}
 		}
@@ -375,12 +381,18 @@ public class ConfigMethods
 		if (parameter.isLimited()) {
 			int iMaxValue = parameter.getMaxValue();
 			if (iMaxValue != Integer.MAX_VALUE && newValue > iMaxValue) {
-				return new ValidationInfo(false, "Max " + iMaxValue);
+				return new ValidationInfo(false,
+						MessageText.getString("xmwebui.param.validation.max", new String[] {
+							"" + iMaxValue
+						}));
 			}
 
 			int iMinValue = parameter.getMinValue();
 			if (iMinValue != Integer.MIN_VALUE && newValue < iMinValue) {
-				return new ValidationInfo(false, "Min " + iMinValue);
+				return new ValidationInfo(false,
+						MessageText.getString("xmwebui.param.validation.min", new String[] {
+							"" + iMinValue
+						}));
 			}
 		}
 
@@ -738,7 +750,10 @@ public class ConfigMethods
 					out.put("width-hint", widthInCharacters);
 				}
 				if (param instanceof StringParameterImpl) {
-					out.put("multiline", ((StringParameterImpl) param).getMultiLine());
+					int multiLine = ((StringParameterImpl) param).getMultiLine();
+					if (multiLine > 0) {
+						out.put("multiline", multiLine);
+					}
 					String validChars = ((StringParameterImpl) param).getValidChars();
 					if (validChars != null) {
 						out.put("valid-case-sensitive",
