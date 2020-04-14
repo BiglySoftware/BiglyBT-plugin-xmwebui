@@ -566,11 +566,12 @@ public class ConfigMethods
 
 		if ((param instanceof ParameterGroupImpl)
 				&& param.getMinimumRequiredUserMode() <= maxUserModeRequested) {
-			String rid = ((ParameterGroup) param).getGroupTitleKey();
+			ParameterGroupImpl paramGroup = (ParameterGroupImpl) param;
+			String rid = paramGroup.getGroupTitleKey();
 
 			pgInfoStack.push(pgInfo.copy());
 
-			pgInfo.reset((ParameterGroupImpl) param);
+			pgInfo.reset(paramGroup);
 			if (rid == null) {
 				pgInfo.list = list;
 			}
@@ -582,12 +583,17 @@ public class ConfigMethods
 				out.put("title", title);
 				out.put("parameters", pgInfo.list);
 				out.put("id", rid);
-				int numberColumns = ((ParameterGroupImpl) param).getNumberColumns();
+				int numberColumns = paramGroup.getNumberColumns();
 				if (numberColumns > 1) {
 					out.put("col-hint", numberColumns);
 				}
 				addIfNotNull(out, "key", param.getConfigKeyName());
 				addIfNotNull(out, "ref-id", ((ParameterImpl) param).getReferenceID());
+
+				ParameterTabFolderImpl tabFolder = paramGroup.getTabFolder();
+				if (tabFolder != null) {
+					out.put("tabfolder", true);
+				}
 				list.add(out);
 			}
 
@@ -649,17 +655,21 @@ public class ConfigMethods
 				out.put("key", key);
 			}
 
-			boolean canSet = true;
+			boolean showVal = true;
 
 			if (param instanceof PasswordParameter) {
-				byte[] value = ((PasswordParameter) param).getValue();
+				PasswordParameter passwordParameter = (PasswordParameter) param;
+				byte[] value = passwordParameter.getValue();
 				boolean isSet = value != null && value.length > 0;
-				out.put("is-set", isSet);
-				out.put("width-hint",
-						((PasswordParameter) param).getWidthInCharacters());
+				out.put("set", isSet);
+				int widthInCharacters = passwordParameter.getWidthInCharacters();
+				if (widthInCharacters > 0) {
+					out.put("width-hint", widthInCharacters);
+				}
+				showVal = false;
 
 			} else if (param instanceof HyperlinkParameter) {
-				canSet = false;
+				showVal = false;
 				String hyperlink = ((HyperlinkParameter) param).getHyperlink();
 
 				String linkTextKey = ((HyperlinkParameter) param).getLinkTextKey();
@@ -672,7 +682,7 @@ public class ConfigMethods
 				out.put("hyperlink", hyperlink);
 
 			} else if (param instanceof ActionParameter) {
-				canSet = false;
+				showVal = false;
 				String actionResource = ((ActionParameter) param).getActionResource();
 				out.put("text", getString(actionResource));
 				out.put("action-id", ((ActionParameter) param).getActionID());
@@ -763,7 +773,7 @@ public class ConfigMethods
 				}
 			}
 
-			if (canSet) {
+			if (showVal) {
 				Object val = param.getValueObject();
 				if (val != null) {
 					out.put("val", val);
@@ -826,7 +836,12 @@ public class ConfigMethods
 					ParamGroupInfo pgInfoPop = pgInfoStack.pop();
 					if (pgInfoPop != null) {
 						pgInfo.set(pgInfoPop);
-						endGroup = pgInfo.numParamsLeft < 0;
+						if (pgInfo.numParamsLeft > 0) {
+							pgInfo.numParamsLeft--;
+							endGroup = pgInfo.numParamsLeft <= 0;
+						} else{
+							endGroup = false;
+						}
 					} else {
 						endGroup = true;
 					}
@@ -973,7 +988,7 @@ public class ConfigMethods
 		}
 		out.put("id", getFriendlyConfigSectionID(section.getConfigSectionID()));
 		out.put("parent-id",
-				getFriendlyConfigSectionID(section.getParentSectionID()));
+				getFriendlyConfigSectionID(getHackedParentSectionID(section)));
 		int minUserMode = section.getMinUserMode();
 		int maxUserMode = section.getMaxUserMode();
 		if (minUserMode != 0 || maxUserMode != 0) {
@@ -1022,6 +1037,14 @@ public class ConfigMethods
 		return out;
 	}
 
+	private static String getHackedParentSectionID(BaseConfigSection section) {
+		String parentSectionID = section.getParentSectionID();
+		if (parentSectionID.equals(ConfigSection.SECTION_INTERFACE)) {
+			return ConfigSection.SECTION_ROOT;
+		}
+		return parentSectionID;
+	}
+
 	void getSections(List<String> sections, Map<String, Object> args,
 			Map<String, Object> result) {
 		int usermode = COConfigurationManager.getIntParameter("User Mode");
@@ -1057,7 +1080,7 @@ public class ConfigMethods
 					jsonSection.putAll(sectionAsMap);
 				} else {
 					String sectionParentID = getFriendlyConfigSectionID(
-							section.getParentSectionID());
+							getHackedParentSectionID(section));
 					if (sectionParentID.equals(requestedSection)) {
 						if (listSubSections == null) {
 							listSubSections = new ArrayList<>();
@@ -1227,14 +1250,14 @@ public class ConfigMethods
 			// Internal Sections are in the order we want them.  
 			// place ones from repository at the bottom of correct parent
 			for (BaseConfigSection repoConfigSection : repoList) {
-				String repoParentID = repoConfigSection.getParentSectionID();
+				String repoParentID = getHackedParentSectionID(repoConfigSection);
 
 				int size = configSections.size();
 				int insertAt = size;
 				for (int i = 0; i < size; i++) {
 					BaseConfigSection configSection = configSections.get(i);
 					if (insertAt == i) {
-						if (!repoParentID.equals(configSection.getParentSectionID())) {
+						if (!repoParentID.equals(getHackedParentSectionID(configSection))) {
 							break;
 						}
 						insertAt++;
