@@ -174,6 +174,7 @@ public class ConfigMethods
 				}
 
 				if (ok) {
+					COConfigurationManager.save();
 					Map<String, Object> paramAsMap = getParamAsMap(parameter,
 							new ParamGroupInfo(), new Stack<>(), 99);
 					paramAsMap.put("section-id", pwcs.configSection);
