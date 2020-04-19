@@ -85,36 +85,34 @@ public class ConfigMethods
 		}
 
 		boolean found = false;
-		boolean needsBuild = !section.isBuilt();
+		boolean buildResult = build(section);
 		try {
-			if (needsBuild) {
-				section.build();
-				section.postBuild();
-			}
-
 			Parameter[] parameters = section.getParamArray();
 			for (Parameter parameter : parameters) {
 				if (parameter instanceof ActionParameter) {
 					String id = ((ActionParameter) parameter).getActionID();
 					if (actionID.equals(id) && (parameter instanceof ParameterImpl)) {
-						((ParameterImpl) parameter).fireParameterChanged();
 						found = true;
+						if (!parameter.isEnabled()) {
+							throw new TextualException(
+									"action-id '" + actionID + "' is disabled");
+						}
+						((ParameterImpl) parameter).fireParameterChanged();
 						int usermode = COConfigurationManager.getIntParameter("User Mode");
-						section.deleteConfigSection();
-						section.build();
-						section.postBuild();
+						unbuild(section, buildResult);
+
+						buildResult = build(section);
 						Map<String, Object> sectionAsMap = getSectionAsMap(section,
 								usermode);
 						result.put(sectionID, sectionAsMap);
+						break;
 					}
 				}
 			}
 		} catch (Throwable t) {
 			plugin.log(actionID, t);
 		} finally {
-			if (needsBuild) {
-				section.deleteConfigSection();
-			}
+			unbuild(section, buildResult);
 		}
 		if (!found) {
 			throw new TextualException(
@@ -557,9 +555,8 @@ public class ConfigMethods
 
 		List<Map<String, Object>> list = pgInfo.list;
 
-		boolean paramEnabled = pgInfo.isEnabled(param);
 		Map<String, Object> out = new HashMap<>();
-		out.put("enabled", paramEnabled);
+		out.put("enabled", param.isEnabled());
 		int minimumRequiredUserMode = param.getMinimumRequiredUserMode();
 		if (minimumRequiredUserMode > 0) {
 			out.put("min-user-mode", minimumRequiredUserMode);
@@ -613,33 +610,6 @@ public class ConfigMethods
 			}
 
 			String key = param.getConfigKeyName();
-
-			if (key != null && (param instanceof ParameterImpl)) {
-				ParameterImpl parami = (ParameterImpl) param;
-				List<Parameter> enabledOnSelectionParameters = parami.getEnabledOnSelectionParameters();
-				for (Parameter p : enabledOnSelectionParameters) {
-					List<EnablerParameter> enablerParameters = pgInfo.mapEnableParams.get(
-							p);
-					//noinspection Java8MapApi
-					if (enablerParameters == null) {
-						enablerParameters = new ArrayList<>();
-						pgInfo.mapEnableParams.put(p, enablerParameters);
-					}
-					enablerParameters.add(parami);
-				}
-
-				List<Parameter> disabledOnSelectionParameters = parami.getDisabledOnSelectionParameters();
-				for (Parameter p : disabledOnSelectionParameters) {
-					List<EnablerParameter> disablerParameters = pgInfo.mapDisableParams.get(
-							p);
-					//noinspection Java8MapApi
-					if (disablerParameters == null) {
-						disablerParameters = new ArrayList<>();
-						pgInfo.mapDisableParams.put(p, disablerParameters);
-					}
-					disablerParameters.add(parami);
-				}
-			}
 
 			if (!param.isVisible() || !pgInfo.visible) {
 				return out;
@@ -840,7 +810,7 @@ public class ConfigMethods
 						if (pgInfo.numParamsLeft > 0) {
 							pgInfo.numParamsLeft--;
 							endGroup = pgInfo.numParamsLeft <= 0;
-						} else{
+						} else {
 							endGroup = false;
 						}
 					} else {
@@ -875,12 +845,8 @@ public class ConfigMethods
 					&& !optionalSectionID.equals(section.getConfigSectionID())) {
 				continue;
 			}
-			boolean needsBuild = !section.isBuilt();
+			boolean buildResult = build(section);
 			try {
-				if (needsBuild) {
-					section.build();
-					section.postBuild();
-				}
 
 				ParameterImpl pluginParam = section.getPluginParam(configKey);
 				if (pluginParam != null) {
@@ -890,9 +856,7 @@ public class ConfigMethods
 			} catch (Throwable t) {
 				plugin.log(configKey, t);
 			} finally {
-				if (needsBuild) {
-					section.deleteConfigSection();
-				}
+				unbuild(section, buildResult);
 			}
 		}
 		return null;
@@ -911,13 +875,8 @@ public class ConfigMethods
 			Stack<ParamGroupInfo> pgInfoStack = new Stack<>();
 			ParamGroupInfo pgInfo = new ParamGroupInfo();
 
-			boolean needsBuild = !section.isBuilt();
+			boolean buildResult = build(section);
 			try {
-				if (needsBuild) {
-					section.build();
-					section.postBuild();
-				}
-
 				Parameter[] paramArray = section.getParamArray();
 				List<Parameter> params = new ArrayList<>();
 				for (Parameter param : paramArray) {
@@ -970,13 +929,75 @@ public class ConfigMethods
 			} catch (Throwable t) {
 				plugin.log("build", t);
 			} finally {
+				unbuild(section, buildResult);
+			}
+		}
 
-				if (needsBuild) {
-					section.deleteConfigSection();
+	}
+
+	private static void unbuild(BaseConfigSection section, boolean buildResult) {
+		if (buildResult) {
+			section.deleteConfigSection();
+		}
+	}
+
+	private static boolean build(BaseConfigSection section) {
+		boolean needsBuild = !section.isBuilt();
+		if (needsBuild) {
+			section.build();
+			section.postBuild();
+
+			// Set proper enabled/disabled states
+			Parameter[] parameters = section.getParamArray();
+			HashSet<Parameter> triggeredParams = new HashSet<>();
+			for (Parameter param : parameters) {
+				if (param instanceof BooleanParameterImpl) {
+					triggerOnSelectionParams((BooleanParameterImpl) param, triggeredParams);
 				}
 			}
 		}
 
+		return needsBuild;
+	}
+
+	private static void triggerOnSelectionParams(BooleanParameterImpl param,
+			HashSet<Parameter> triggeredParams) {
+		if (triggeredParams.contains(param)) {
+			return;
+		}
+		if (!param.isEnabled()) {
+			return;
+		}
+		triggeredParams.add(param);
+
+		boolean isSelected = param.getValue();
+
+		List<BooleanParameterImpl> listMoreTriggers = new ArrayList<>();
+		List<Parameter> enabledOnSelectionParameters = param.getEnabledOnSelectionParameters();
+		for (Parameter p : enabledOnSelectionParameters) {
+			p.setEnabled(isSelected);
+			if (p instanceof BooleanParameterImpl) {
+				listMoreTriggers.add((BooleanParameterImpl) p);
+			}
+		}
+
+		for (BooleanParameterImpl triggerParam : listMoreTriggers) {
+			triggerOnSelectionParams(triggerParam, triggeredParams);
+		}
+
+		////
+
+		listMoreTriggers.clear();
+		List<Parameter> disabledOnSelectionParameters = param.getDisabledOnSelectionParameters();
+		for (Parameter p : disabledOnSelectionParameters) {
+			p.setEnabled(!isSelected);
+			if (p instanceof BooleanParameterImpl) {
+				listMoreTriggers.add((BooleanParameterImpl) p);
+			}
+		}
+		for (BooleanParameterImpl triggerParam : listMoreTriggers) {
+			triggerOnSelectionParams(triggerParam, triggeredParams);
+		}
 	}
 
 	Map<String, Object> getSectionAsMap(BaseConfigSection section,
@@ -998,13 +1019,8 @@ public class ConfigMethods
 		}
 
 		if (maxUserModeRequested >= 0) {
-			boolean needsBuild = !section.isBuilt();
+			boolean buildResult = build(section);
 			try {
-				if (needsBuild) {
-					section.build();
-					section.postBuild();
-				}
-
 				Parameter[] paramArray = section.getParamArray();
 				List<Parameter> params = new ArrayList<>();
 				for (Parameter param : paramArray) {
@@ -1029,9 +1045,7 @@ public class ConfigMethods
 			} catch (Throwable t) {
 				plugin.log("build", t);
 			} finally {
-				if (needsBuild) {
-					section.deleteConfigSection();
-				}
+				unbuild(section, buildResult);
 			}
 		}
 
@@ -1121,10 +1135,6 @@ public class ConfigMethods
 
 		String id;
 
-		Map<Parameter, List<EnablerParameter>> mapEnableParams = new HashMap<>();
-
-		Map<Parameter, List<EnablerParameter>> mapDisableParams = new HashMap<>();
-
 		public void reset(ParameterGroupImpl pg) {
 			this.list = new ArrayList<>();
 			this.id = pg.getGroupTitleKey();
@@ -1150,23 +1160,6 @@ public class ConfigMethods
 			this.visible = pop.visible;
 			this.id = pop.id;
 			this.enabled = pop.enabled;
-		}
-
-		public boolean isEnabled(Parameter param) {
-			boolean isEnabled = param.isEnabled() && enabled;
-			List<EnablerParameter> disablerParameters = mapDisableParams.get(param);
-			if (disablerParameters != null) {
-				for (EnablerParameter p : disablerParameters) {
-					isEnabled &= !((Boolean) p.getValueObject());
-				}
-			}
-			List<EnablerParameter> enablerParameters = mapEnableParams.get(param);
-			if (enablerParameters != null) {
-				for (EnablerParameter p : enablerParameters) {
-					isEnabled &= ((Boolean) p.getValueObject());
-				}
-			}
-			return isEnabled;
 		}
 	}
 
