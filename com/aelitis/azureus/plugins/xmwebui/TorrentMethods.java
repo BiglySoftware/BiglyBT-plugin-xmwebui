@@ -184,95 +184,97 @@ public class TorrentMethods
 		// bandwidthPriority not used
 		//getNumber(args.get("bandwidthPriority"), TR_PRI_NORMAL);
 
-		final DownloadWillBeAddedListener add_listener = new DownloadWillBeAddedListener() {
-			@Override
-			public void initialised(Download download) {
-				int numFiles = download.getDiskManagerFileCount();
-				List files_wanted = getList(args.get("files-wanted"));
-				List files_unwanted = getList(args.get("files-unwanted"));
+		final DownloadWillBeAddedListener add_listener = addedDL -> {
+			int numFiles = addedDL.getDiskManagerFileCount();
+			List files_wanted = getList(args.get("files-wanted"));
+			List files_unwanted = getList(args.get("files-unwanted"));
 
-				boolean[] toDelete = new boolean[numFiles]; // all false
+			boolean[] toDelete = new boolean[numFiles]; // all false
 
-				int numWanted = files_wanted.size();
-				if (numWanted != 0 && numWanted != numFiles) {
-					// some wanted -- so, set all toDelete and reset ones in list
-					Arrays.fill(toDelete, true);
-					for (Object oWanted : files_wanted) {
-						int idx = StaticUtils.getNumber(oWanted, -1).intValue();
-						if (idx >= 0 && idx < numFiles) {
-							toDelete[idx] = false;
+			int numWanted = files_wanted.size();
+			if (numWanted != 0 && numWanted != numFiles) {
+				// some wanted -- so, set all toDelete and reset ones in list
+				Arrays.fill(toDelete, true);
+				for (Object oWanted : files_wanted) {
+					int idx = StaticUtils.getNumber(oWanted, -1).intValue();
+					if (idx >= 0 && idx < numFiles) {
+						toDelete[idx] = false;
+					}
+				}
+			}
+			for (Object oUnwanted : files_unwanted) {
+				int idx = StaticUtils.getNumber(oUnwanted, -1).intValue();
+				if (idx >= 0 && idx < numFiles) {
+					toDelete[idx] = true;
+				}
+			}
+
+			for (int i = 0; i < toDelete.length; i++) {
+				if (toDelete[i]) {
+					addedDL.getDiskManagerFileInfo(i).setDeleted(true);
+				}
+			}
+
+			List priority_high = getList(args.get("priority-high"));
+			for (Object oHighPriority : priority_high) {
+				int idx = StaticUtils.getNumber(oHighPriority, -1).intValue();
+				if (idx >= 0 && idx < numFiles) {
+					addedDL.getDiskManagerFileInfo(idx).setNumericPriority(
+							DiskManagerFileInfo.PRIORITY_HIGH);
+				}
+			}
+			List priority_low = getList(args.get("priority-low"));
+			for (Object oLowPriority : priority_low) {
+				int idx = StaticUtils.getNumber(oLowPriority, -1).intValue();
+				if (idx >= 0 && idx < numFiles) {
+					addedDL.getDiskManagerFileInfo(idx).setNumericPriority(
+							DiskManagerFileInfo.PRIORITY_LOW);
+				}
+			}
+			// don't need priority-normal if they are normal by default.
+
+			Boolean sequential = getBoolean(args.get("sequential"), null);
+			if (sequential != null) {
+				addedDL.setFlag(Download.FLAG_SEQUENTIAL_DOWNLOAD, sequential);
+			}
+
+			// handle initial categories/tags
+
+			try {
+				String vuze_category = (String) args.get("vuze_category");
+
+				if (vuze_category != null) {
+
+					vuze_category = vuze_category.trim();
+
+					if (vuze_category.length() > 0) {
+
+						TorrentAttribute ta_category = pi.getTorrentManager().getAttribute(
+								TorrentAttribute.TA_CATEGORY);
+
+						addedDL.setAttribute(ta_category, vuze_category);
+					}
+				}
+
+				List<String> vuze_tags = (List<String>) args.get("vuze_tags");
+
+				if (vuze_tags != null) {
+
+					TagManager tm = TagManagerFactory.getTagManager();
+
+					if (tm.isEnabled()) {
+
+						TagType tt = tm.getTagType(TagType.TT_DOWNLOAD_MANUAL);
+
+						for (String tag_name : vuze_tags) {
+
+							addTagToDownload(addedDL, tag_name, tt);
 						}
 					}
 				}
-				for (Object oUnwanted : files_unwanted) {
-					int idx = StaticUtils.getNumber(oUnwanted, -1).intValue();
-					if (idx >= 0 && idx < numFiles) {
-						toDelete[idx] = true;
-					}
-				}
+			} catch (Throwable e) {
 
-				for (int i = 0; i < toDelete.length; i++) {
-					if (toDelete[i]) {
-						download.getDiskManagerFileInfo(i).setDeleted(true);
-					}
-				}
-
-				List priority_high = getList(args.get("priority-high"));
-				for (Object oHighPriority : priority_high) {
-					int idx = StaticUtils.getNumber(oHighPriority, -1).intValue();
-					if (idx >= 0 && idx < numFiles) {
-						download.getDiskManagerFileInfo(idx).setNumericPriority(
-								DiskManagerFileInfo.PRIORITY_HIGH);
-					}
-				}
-				List priority_low = getList(args.get("priority-low"));
-				for (Object oLowPriority : priority_low) {
-					int idx = StaticUtils.getNumber(oLowPriority, -1).intValue();
-					if (idx >= 0 && idx < numFiles) {
-						download.getDiskManagerFileInfo(idx).setNumericPriority(
-								DiskManagerFileInfo.PRIORITY_LOW);
-					}
-				}
-				// don't need priority-normal if they are normal by default.
-
-				// handle initial categories/tags
-
-				try {
-					String vuze_category = (String) args.get("vuze_category");
-
-					if (vuze_category != null) {
-
-						vuze_category = vuze_category.trim();
-
-						if (vuze_category.length() > 0) {
-
-							TorrentAttribute ta_category = pi.getTorrentManager().getAttribute(
-									TorrentAttribute.TA_CATEGORY);
-
-							download.setAttribute(ta_category, vuze_category);
-						}
-					}
-
-					List<String> vuze_tags = (List<String>) args.get("vuze_tags");
-
-					if (vuze_tags != null) {
-
-						TagManager tm = TagManagerFactory.getTagManager();
-
-						if (tm.isEnabled()) {
-
-							TagType tt = tm.getTagType(TagType.TT_DOWNLOAD_MANUAL);
-
-							for (String tag_name : vuze_tags) {
-
-								addTagToDownload(download, tag_name, tt);
-							}
-						}
-					}
-				} catch (Throwable e) {
-
-					e.printStackTrace();
-				}
+				e.printStackTrace();
 			}
 		};
 
@@ -1005,6 +1007,8 @@ public class TorrentMethods
 		long uploaded_ever = l_uploaded_ever == null ? -1 : l_uploaded_ever;
 		long downloaded_ever = l_downloaded_ever == null ? -1 : l_downloaded_ever;
 
+		Boolean sequential = getBoolean(args.get("sequential"), null);
+
 		String name = (String) args.get("name");
 
 		for (DownloadStub download_stub : downloads) {
@@ -1292,6 +1296,11 @@ public class TorrentMethods
 						}
 					}
 				}
+
+				if (sequential != null) {
+					download.setFlag(Download.FLAG_SEQUENTIAL_DOWNLOAD, sequential);
+				}
+
 			} catch (Throwable e) {
 
 				Debug.out(e);
