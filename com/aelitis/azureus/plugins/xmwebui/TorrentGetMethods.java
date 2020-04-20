@@ -38,7 +38,6 @@ import com.biglybt.core.peer.*;
 import com.biglybt.core.peer.util.PeerUtils;
 import com.biglybt.core.peermanager.piecepicker.PiecePicker;
 import com.biglybt.core.tag.*;
-import com.biglybt.core.torrent.TOTorrent;
 import com.biglybt.core.tracker.TrackerPeerSource;
 import com.biglybt.core.tracker.client.*;
 import com.biglybt.core.util.*;
@@ -1070,6 +1069,12 @@ public class TorrentGetMethods
 
 					break;
 				}
+				
+				case FIELD_TORRENT_SEQUENTIAL: {
+					value = download.getFlag(Download.FLAG_SEQUENTIAL_DOWNLOAD);
+					break;
+				}
+				
 				default:
 					if (plugin.trace_param.getValue()) {
 						plugin.log("Unhandled get-torrent field: " + field);

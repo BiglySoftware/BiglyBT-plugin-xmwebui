@@ -233,7 +233,7 @@ public class TorrentMethods
 			}
 			// don't need priority-normal if they are normal by default.
 
-			Boolean sequential = getBoolean(args.get("sequential"), null);
+			Boolean sequential = getBoolean(args.get(FIELD_TORRENT_SEQUENTIAL), null);
 			if (sequential != null) {
 				addedDL.setFlag(Download.FLAG_SEQUENTIAL_DOWNLOAD, sequential);
 			}
@@ -1007,7 +1007,7 @@ public class TorrentMethods
 		long uploaded_ever = l_uploaded_ever == null ? -1 : l_uploaded_ever;
 		long downloaded_ever = l_downloaded_ever == null ? -1 : l_downloaded_ever;
 
-		Boolean sequential = getBoolean(args.get("sequential"), null);
+		Boolean sequential = getBoolean(args.get(FIELD_TORRENT_SEQUENTIAL), null);
 
 		String name = (String) args.get("name");
 
