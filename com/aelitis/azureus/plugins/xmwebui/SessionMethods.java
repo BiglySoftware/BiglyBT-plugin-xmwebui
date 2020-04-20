@@ -82,6 +82,7 @@ public class SessionMethods
 			"field:torrent-get:eta",
 			"field:torrent-get:isForced",
 			"field:torrent-get:files:eta",
+			"field:torrent-set:sequential",
 			"method:config-get",
 			"method:config-set", 
 			"method:config-action"
