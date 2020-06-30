@@ -176,7 +176,7 @@ public class TorrentMethods
 		String download_dir = (String) args.get(TR_PREFS_KEY_DOWNLOAD_DIR);
 
 		final File file_Download_dir = download_dir == null ? null
-				: new File(download_dir);
+				: FileUtil.newFile(download_dir);
 
 		// peer-limit not used
 		//getNumber(args.get("peer-limit"), 0);
@@ -867,7 +867,7 @@ public class TorrentMethods
 
 		List<DownloadStub> downloads = plugin.getDownloads(ids, false);
 
-		File fSavePath = new File(sSavePath);
+		File fSavePath = FileUtil.newFile(sSavePath);
 
 		for (DownloadStub download_stub : downloads) {
 
@@ -897,17 +897,17 @@ public class TorrentMethods
 
 				if (state == com.biglybt.core.download.DownloadManager.STATE_ERROR) {
 
-					dm.setTorrentSaveDir(sSavePath);
+					dm.setTorrentSaveDir(FileUtil.newFile(sSavePath), false);
 
 					boolean found = dm.filesExist(true);
 					if (!found && dm.getTorrent() != null
 							&& !dm.getTorrent().isSimpleTorrent()) {
 						String parentPath = fSavePath.getParent();
 						if (parentPath != null) {
-							dm.setTorrentSaveDir(parentPath);
+							dm.setTorrentSaveDir(FileUtil.newFile(parentPath), false);
 							found = dm.filesExist(true);
 							if (!found) {
-								dm.setTorrentSaveDir(sSavePath);
+								dm.setTorrentSaveDir(FileUtil.newFile(sSavePath), false);
 							}
 						}
 					}
@@ -1024,7 +1024,7 @@ public class TorrentMethods
 				}
 
 				if (location != null) {
-					File file = new File(location);
+					File file = FileUtil.newFile(location);
 					if (!file.isFile()) {
 						try {
 							download.moveDataFiles(file);
@@ -1278,7 +1278,7 @@ public class TorrentMethods
 								paused_it = true;
 							}
 
-							File new_file = new File(existing.getParentFile(), new_name);
+							File new_file = FileUtil.newFile(existing.getParentFile(), new_name);
 
 							if (new_file.exists()) {
 

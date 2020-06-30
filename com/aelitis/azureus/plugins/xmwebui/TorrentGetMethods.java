@@ -21,6 +21,7 @@ package com.aelitis.azureus.plugins.xmwebui;
 import java.io.File;
 import java.io.UnsupportedEncodingException;
 import java.net.URL;
+import java.net.URLDecoder;
 import java.util.*;
 
 import org.gudy.bouncycastle.util.encoders.Base64;
@@ -463,7 +464,7 @@ public class TorrentGetMethods
 					// downloadDir                 | string                      | tr_torrent
 
 					if (t.isSimpleTorrent()) {
-						value = new File(download.getSavePath()).getParent();
+						value = FileUtil.newFile(download.getSavePath()).getParent();
 					} else {
 						value = download.getSavePath();
 					}
@@ -1777,9 +1778,18 @@ public class TorrentGetMethods
 					// TODO: .dnd_az parent..
 					//String dnd_sf = dm.getDownloadState().getAttribute( DownloadManagerState.AT_DND_SUBFOLDER );
 
+					String relativePath = absolutePath.substring(savePath.length());
 					// + 1 to remove the dir separator
-					obj.put(FIELD_FILES_NAME,
-							absolutePath.substring(savePath.length() + 1));
+					if (relativePath.startsWith(File.separator)) {
+						relativePath = relativePath.substring(File.separator.length());
+					} else if (absolutePath.startsWith("content://") && relativePath.startsWith("%2F")) {
+						relativePath = relativePath.substring(3);
+						try {
+							relativePath = URLDecoder.decode(relativePath, "UTF-8");
+						} catch (UnsupportedEncodingException e) {
+						}
+					}
+					obj.put(FIELD_FILES_NAME, relativePath);
 				} else {
 					obj.put(FIELD_FILES_NAME, absolutePath);
 				}

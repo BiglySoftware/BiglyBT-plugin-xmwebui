@@ -170,7 +170,7 @@ public class SessionMethods
 		// RPC 12 to 14
 		if (canAdd(TR_PREFS_KEY_DOWNLOAD_DIR_FREE_SPACE, fields, all)) {
 			long space = save_dir == null ? -1
-					: FileUtil.getUsableSpace(new File(save_dir));
+					: FileUtil.getUsableSpace(FileUtil.newFile(save_dir));
 			result.put(TR_PREFS_KEY_DOWNLOAD_DIR_FREE_SPACE, space);
 		}
 

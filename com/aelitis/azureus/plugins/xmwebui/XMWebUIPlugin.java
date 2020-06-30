@@ -308,13 +308,10 @@ XMWebUIPlugin
 				"xmwebui.alternate.ui.dir", "");
 		launchAltWebUI_param = config.addHyperlinkParameter2(
 				"xmwebui.openui", "");
-		ParameterListener webdir_param_listener = new ParameterListener() {
-			@Override
-			public void parameterChanged(Parameter param) {
-				String val = ((DirectoryParameter) param).getValue();
-				launchAltWebUI_param.setEnabled(
-						val != null && new File(val).isDirectory());
-			}
+		ParameterListener webdir_param_listener = param -> {
+			String val = ((DirectoryParameter) param).getValue();
+			launchAltWebUI_param.setEnabled(
+					val != null && FileUtil.newFile(val).isDirectory());
 		};
 		webdir_param.addListener(webdir_param_listener);
 		webdir_param_listener.parameterChanged(webdir_param);
@@ -632,7 +629,7 @@ XMWebUIPlugin
 				
 			}else{
 				
-				File dir = new File( data_dir );
+				File dir = FileUtil.newFile( data_dir );
 				
 				if ( !dir.exists()){
 					
@@ -671,7 +668,7 @@ XMWebUIPlugin
 				
 			}else{
 				
-				File dir = new File( torrent_dir );
+				File dir = FileUtil.newFile( torrent_dir );
 				
 				if ( !dir.exists()){
 					
@@ -772,7 +769,8 @@ XMWebUIPlugin
 	public File
 	getResourceDir()
 	{
-		return( new File( plugin_interface.getPluginDirectoryName(), "transmission" + File.separator + "web" ));
+		return FileUtil.newFile(plugin_interface.getPluginDirectoryName(),
+				"transmission", "web");
 	}
 	
 	@Override
@@ -2622,7 +2620,7 @@ XMWebUIPlugin
 			return;
 		}
 		
-		File file = new File((String) oPath);
+		File file = FileUtil.newFile((String) oPath);
 		while (file != null && !file.exists()) {
 			file = file.getParentFile();
 		}
