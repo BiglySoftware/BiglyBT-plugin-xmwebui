@@ -1,0 +1,40 @@
+apply plugin: 'java-library'
+
+/*
+To use this in Android Studio, place something like the following in your root settings.gradle
+    include ':BiglyBT-plugin-xmwebui'
+    project(':BiglyBT-plugin-xmwebui').buildFileName = 'android-build.gradle'
+or, just rename this file to build.gradle
+    
+I couldn't figure out how to get Android Studio/gradle to use a different sourceset
+*/
+
+sourceSets {
+    main {
+        java {
+            srcDirs = [
+                    '.'
+            ]
+            exclude 'com/aelitis/azureus/plugins/xmwebui/swt/**'
+            exclude 'com/aelitis/azureus/plugins/xmwebui/console/**'
+        }
+
+        resources {
+            includes = ['**/*.properties']
+            srcDirs = [
+                    '.'
+            ]
+            exclude 'build/**'
+            exclude 'build'
+        }
+    }
+}
+
+dependencies {
+    implementation project(path: ':core')
+}
+
+java {
+    sourceCompatibility JavaVersion.VERSION_1_8
+    targetCompatibility JavaVersion.VERSION_1_8
+}
