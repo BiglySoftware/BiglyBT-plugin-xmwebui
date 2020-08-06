@@ -115,6 +115,10 @@
    "seedIdleMode"        | number     which seeding inactivity to use.  See tr_idlelimit
    "seedRatioLimit"      | double     torrent-level seeding ratio
    "seedRatioMode"       | number     which ratio to use.  See tr_ratiolimit
+>>> BiglyBT
+   "tagAdd"              | array      list of string (tag names) or number (tag uid) to add to torrent
+   "tagRemove"           | array      list of string (tag names) or number (tag uid) to remove from torrent
+<<< BiglyBT
    "trackerAdd"          | array      strings of announce URLs to add
    "trackerRemove"       | array      ids of trackers to remove
    "trackerReplace"      | array      pairs of <trackerId/new announce URLs>
@@ -282,6 +286,9 @@
    sizeWhenDone                | number                      | tr_stat
    startDate                   | number                      | tr_stat
    status                      | number                      | tr_stat
+>>> BiglyBT
+   tag-uids                    | array of number. See "tags-get-list" method
+<<< BiglyBT
    trackers                    | array (see below)           | n/a
    trackerStats                | array (see below)           | n/a
    totalSize                   | number                      | tr_info
@@ -475,6 +482,11 @@
    "priority-high"      | array       indices of high-priority file(s)
    "priority-low"       | array       indices of low-priority file(s)
    "priority-normal"    | array       indices of normal-priority file(s)
+>>> BiglyBT
+   "vuze_tags"          | array       list of strings. Each string will be added 
+                        |             as a tag.  If the tag doesn't exist yet, 
+                        |             it will be created.
+<<< BiglyBT
 
    Either "filename" OR "metainfo" MUST be included.
    All other arguments are optional.
@@ -1103,19 +1115,49 @@ VZ.4 Tags
                 "first-priority-seeding"      | boolean  Set torrent 1st Priority Seeding
 
 
+   Method name: "tags-add"
+   
+   key                  | value type & description
+   ---------------------+-------------------------------------------------
+   "name"               | string     Tag name
+   fields               | See tags-set for tag fields you can set
+
+   Response arguments:
+   
+   Returns all keys in "tags" key in "tags-get-list" (For example, "count" key
+   be available at the root of the response)
+
+
+   Method name: "tags-set"
+   
+   key                  | value type & description
+   ---------------------+-------------------------------------------------
+   "uid"                | number     Tag UID.  Optional if "name" key is set to
+                        |            existing tag name
+   "color"              | \
+   "constraint"         |  |
+   "group"              |  |- See types and descriptions in "tags-get-list"
+   "name"               |  |
+   "public"             | /
+
+   Returns all keys in "tags" key in "tags-get-list" (For example, "count" key
+   will be available at the root of the response)
+
+
    Method name: "tags-lookup-start"
 
    Request arguments:
 
    key                  | value type & description
    ---------------------+-------------------------------------------------
-   "ids"                 | array      torrent list, as described in 3.1
+   "ids"                | array      torrent list, as described in 3.1
 
    Response arguments:
 
    key                  | value type & description
    ---------------------+-------------------------------------------------
    "id"                 | string       Tag Search ID to be used for result lookup
+
 
    Method name: "tags-lookup-get-results"
 
