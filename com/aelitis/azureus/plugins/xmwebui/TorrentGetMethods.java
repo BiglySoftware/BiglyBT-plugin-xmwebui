@@ -825,7 +825,11 @@ public class TorrentGetMethods
 					break;
 				case FIELD_TORRENT_STATUS:
 
-					value = torrentGet_status(download);
+					int[] values = torrentGet_status(download);
+					
+					value = values[0];
+
+					torrent.put(FIELD_TORRENT_STATUS + ".biglybt", values[1]);
 
 					break;
 				case FIELD_TORRENT_IS_FORCED:
@@ -2252,7 +2256,7 @@ public class TorrentGetMethods
 		return x;
 	}
 
-	private static Object torrentGet_status(Download download) {
+	private static int[] torrentGet_status(Download download) {
 		// 1 - waiting to verify
 		// 2 - verifying
 		// 4 - downloading
@@ -2307,6 +2311,9 @@ public class TorrentGetMethods
 
 		int state = download.getState();
 
+		DownloadManager core_download = PluginCoreUtils.unwrap(download);
+		int coreState = core_download.getState();
+
 		switch (state) {
 			case Download.ST_DOWNLOADING:
 
@@ -2345,8 +2352,7 @@ public class TorrentGetMethods
 			default:
 				// ST_WAITING, ST_PREPARING
 
-				DownloadManager core_download = PluginCoreUtils.unwrap(download);
-				if (core_download.getState() == DownloadManager.STATE_CHECKING) {
+				if (coreState == DownloadManager.STATE_CHECKING) {
 
 					status_int = CHECKING;
 
@@ -2357,7 +2363,7 @@ public class TorrentGetMethods
 				break;
 		}
 
-		return status_int;
+		return new int[] { status_int, coreState };
 	}
 
 	private static Object torrentGet_trackerStats(DownloadManager core_download) {

@@ -85,7 +85,8 @@ public class SessionMethods
 			"field:torrent:sequential", // -set and -get and -add
 			"method:config-get",
 			"method:config-set", 
-			"method:config-action"
+			"method:config-action",
+			"field:torrent-set:files-dnd"
 		);
 		// @formatter:on
 	}
