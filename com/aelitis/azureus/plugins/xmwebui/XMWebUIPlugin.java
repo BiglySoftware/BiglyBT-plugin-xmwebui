@@ -73,7 +73,8 @@ import com.biglybt.pif.config.ConfigParameterListener;
 import com.biglybt.pif.disk.DiskManagerFileInfo;
 import com.biglybt.pif.download.*;
 import com.biglybt.pif.logging.LoggerChannel;
-import com.biglybt.pif.torrent.*;
+import com.biglybt.pif.torrent.Torrent;
+import com.biglybt.pif.torrent.TorrentAttribute;
 import com.biglybt.pif.tracker.web.TrackerWebPageRequest;
 import com.biglybt.pif.tracker.web.TrackerWebPageResponse;
 import com.biglybt.pif.ui.UIInstance;
@@ -81,6 +82,7 @@ import com.biglybt.pif.ui.UIManagerListener;
 import com.biglybt.pif.ui.config.*;
 import com.biglybt.pif.ui.model.BasicPluginConfigModel;
 import com.biglybt.pif.update.*;
+import com.biglybt.pif.utils.LocaleUtilities;
 import com.biglybt.pif.utils.Utilities;
 import com.biglybt.pif.utils.Utilities.JSONServer;
 import com.biglybt.pif.utils.resourcedownloader.ResourceDownloader;
@@ -173,6 +175,7 @@ XMWebUIPlugin
     
     private BooleanParameter hide_ln_param;
     private BooleanParameter force_net_param;
+    private StringListParameter uncheck_files_param;
     private DirectoryParameter webdir_param;
     private HyperlinkParameter openui_param;
     private HyperlinkParameter launchAltWebUI_param;
@@ -289,7 +292,9 @@ XMWebUIPlugin
 
 		super.initialize( _plugin_interface );
 
-		plugin_interface.getUtilities().getLocaleUtilities().integrateLocalisedMessageBundle(
+		LocaleUtilities localeUtilities = plugin_interface.getUtilities().getLocaleUtilities();
+
+		localeUtilities.integrateLocalisedMessageBundle(
 				"com.aelitis.azureus.plugins.xmwebui.internat.Messages" );
 		
 		t_id = plugin_interface.getTorrentManager().getPluginAttribute( "xmui.dl.id" );
@@ -321,6 +326,15 @@ XMWebUIPlugin
 		//////
 
 		config.addLabelParameter2( "xmwebui.blank" );
+
+		uncheck_files_param = config.addStringListParameter2(
+				"xmwebui.uncheck.files", "xmwebui.uncheck.files", new String[] {
+						"dnd",
+						"delete"
+				}, new String[] {
+						localeUtilities.getLocalisedMessageText("FileItem.donotdownload"),
+						localeUtilities.getLocalisedMessageText("FileItem.delete")
+				}, "dnd");
 
 		hide_ln_param = config.addBooleanParameter2( "xmwebui.hidelownoise", "xmwebui.hidelownoise", true );
 
@@ -3743,7 +3757,11 @@ XMWebUIPlugin
 				throw (new IOException("Unknown cmd: " + cmd));
 		}
 	}
-	
+
+	public boolean getUncheckDeletes() {
+		return "delete".equals(uncheck_files_param.getValue());
+	}
+
 	protected static class
 	PermissionDeniedException
 		extends IOException

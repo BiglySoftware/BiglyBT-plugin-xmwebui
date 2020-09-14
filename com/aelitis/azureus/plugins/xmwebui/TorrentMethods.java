@@ -1156,6 +1156,7 @@ public class TorrentMethods
 				DiskManagerFileInfo[] files = download.getDiskManagerFileInfo();
 
 				if (files_unwanted != null) {
+					boolean uncheckDeletes = plugin.getUncheckDeletes();
 
 					for (Object o : files_unwanted) {
 
@@ -1163,7 +1164,11 @@ public class TorrentMethods
 
 						if (index >= 0 && index <= files.length) {
 
-							files[index].setDeleted(true);
+							if (uncheckDeletes) {
+								files[index].setDeleted(true);
+							} else {
+								files[index].setSkipped(true);
+							}
 						}
 					}
 				}
