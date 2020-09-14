@@ -942,6 +942,7 @@ public class TorrentMethods
 		List files_wanted = (List) args.get("files-wanted");
 		List files_unwanted = (List) args.get("files-unwanted");
 		List files_dnd = (List) args.get("files-dnd");
+		List files_delete = (List) args.get("files-delete");
 
 		// RPC v5
 		/** true if session upload limits are honored */
@@ -1182,6 +1183,19 @@ public class TorrentMethods
 						if (index >= 0 && index <= files.length) {
 
 							files[index].setSkipped(true);
+						}
+					}
+				}
+
+				if (files_delete != null) {
+
+					for (Object o : files_delete) {
+
+						int index = ((Long) o).intValue();
+
+						if (index >= 0 && index <= files.length) {
+
+							files[index].setDeleted(true);
 						}
 					}
 				}
