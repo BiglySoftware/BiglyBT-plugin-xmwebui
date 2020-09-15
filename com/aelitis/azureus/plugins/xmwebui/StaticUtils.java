@@ -187,7 +187,7 @@ public class StaticUtils
 		Pattern patXT = Pattern.compile("xt=urn:(?:btih|btmh|sha1):([^&]+)");
 		Matcher matcher = patXT.matcher(magnetURI);
 		if (matcher.find()) {
-			return UrlUtils.decodeTruncatedHash(matcher.group(1));
+			return UrlUtils.decodeTruncatedHashFromMagnetURI(matcher.group(1));
 		}
 		return null;
 	}
