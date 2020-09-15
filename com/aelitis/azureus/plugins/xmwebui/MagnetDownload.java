@@ -85,10 +85,21 @@ MagnetDownload
 							
 							String existing = arg_map.get( "xt" );
 							
-							if ( 	existing == null ||
-									( !existing.toLowerCase( Locale.US ).startsWith( "urn:btih:" )  && rhs.startsWith( "urn:sha1:" ))){
+							if ( existing == null ){
 								
 								arg_map.put( lhs, rhs );
+								
+							}else{
+								
+								String lc_existing =  existing.toLowerCase( Locale.US );
+								
+								if ( lc_existing.startsWith( "urn:btih:" ) || lc_existing.startsWith( "urn:btmh:" )){
+									
+										// keep these
+								}else{
+								
+									arg_map.put( lhs, rhs );
+								}
 							}
 						}
 					}else{
@@ -108,9 +119,11 @@ MagnetDownload
 			
 			hash_str = hash_str.toLowerCase( Locale.US );
 			
-			if ( hash_str.startsWith( "urn:btih:" ) || hash_str.startsWith( "urn:sha1" )){
+			if ( hash_str.startsWith( "urn:btih:" ) || hash_str.startsWith( "urn:btmh:" ) || hash_str.startsWith( "urn:sha1:" )){
 				
-				hash = UrlUtils.decodeSHA1Hash( hash_str.substring( 9 ));
+				String	encoded = hash_str.substring(9);
+				
+				hash = UrlUtils.decodeTruncatedHashFromMagnetURI( encoded );
 			}
 		}
 		

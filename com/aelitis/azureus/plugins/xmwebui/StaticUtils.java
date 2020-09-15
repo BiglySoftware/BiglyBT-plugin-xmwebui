@@ -184,10 +184,10 @@ public class StaticUtils
 	}
 
 	public static byte[] getHashFromMagnetURI(String magnetURI) {
-		Pattern patXT = Pattern.compile("xt=urn:(?:btih|sha1):([^&]+)");
+		Pattern patXT = Pattern.compile("xt=urn:(?:btih|btmh|sha1):([^&]+)");
 		Matcher matcher = patXT.matcher(magnetURI);
 		if (matcher.find()) {
-			return UrlUtils.decodeSHA1Hash(matcher.group(1));
+			return UrlUtils.decodeTruncatedHash(matcher.group(1));
 		}
 		return null;
 	}
