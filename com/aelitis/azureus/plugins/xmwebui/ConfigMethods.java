@@ -141,8 +141,9 @@ public class ConfigMethods
 			Object val = parameters.get(key);
 			ParameterWithConfigSection pwcs = getParameter(key, sectionID);
 			if (pwcs != null) {
-				if (!listSections.contains(pwcs.configSection)) {
-					listSections.add(pwcs.configSection);
+				String configSectionID = getFriendlyConfigSectionID(pwcs.configSection);
+				if (!listSections.contains(configSectionID)) {
+					listSections.add(configSectionID);
 				}
 
 				Parameter parameter = pwcs.parameter;
@@ -175,7 +176,7 @@ public class ConfigMethods
 					COConfigurationManager.save();
 					Map<String, Object> paramAsMap = getParamAsMap(parameter,
 							new ParamGroupInfo(), new Stack<>(), 99);
-					paramAsMap.put("section-id", pwcs.configSection);
+					paramAsMap.put("section-id", configSectionID);
 					mapSuccess.put(key, paramAsMap);
 				}
 			}
