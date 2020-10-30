@@ -936,7 +936,7 @@ public class TorrentMethods
 		Number speed_limit_down = StaticUtils.getNumber(
 				args.get(FIELD_TORRENT_DOWNLOAD_LIMIT),
 				StaticUtils.getNumber(args.get(TR_PREFS_KEY_DSPEED_KBps),
-						StaticUtils.getNumber(args.get("speedLimitDownload"))));
+						StaticUtils.getNumber(args.get("speedLimitDownload"), null)));
 		Boolean downloadLimited = getBoolean(FIELD_TORRENT_DOWNLOAD_LIMITED, null);
 
 		List files_wanted = (List) args.get("files-wanted");
@@ -993,7 +993,7 @@ public class TorrentMethods
 		// "uploadLimit"         | number     maximum upload speed (KBps)
 		Number speed_limit_up = StaticUtils.getNumber(args.get("uploadLimit"),
 				StaticUtils.getNumber(args.get(TR_PREFS_KEY_USPEED_KBps),
-						StaticUtils.getNumber(args.get("speedLimitUpload"))));
+						StaticUtils.getNumber(args.get("speedLimitUpload"), null)));
 
 		// "uploadLimited"       | boolean    true if "uploadLimit" is honored
 		Boolean uploadLimited = getBoolean("uploadLimited", null);
