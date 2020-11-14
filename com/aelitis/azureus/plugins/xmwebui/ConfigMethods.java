@@ -150,6 +150,8 @@ public class ConfigMethods
 				boolean ok = false;
 				if (!parameter.isEnabled()) {
 					mapErrors.put(key, "Parameter is disabled");
+				} else if (val == null) {
+					ok = parameter.resetToDefault();
 				} else if (parameter instanceof ColorParameter) {
 					mapErrors.put(key, "setting color not supported yet");
 				} else if (parameter instanceof BooleanParameter) {

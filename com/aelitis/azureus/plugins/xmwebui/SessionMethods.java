@@ -87,7 +87,8 @@ public class SessionMethods
 			"method:config-set", 
 			"method:config-action", 
 			"field:torrent-set:files-dnd",
-			"field:torrent-set:files-delete"
+			"field:torrent-set:files-delete",
+			"method:config-set:null-resets"
 		);
 		// @formatter:on
 	}
