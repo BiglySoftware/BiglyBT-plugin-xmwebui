@@ -21,6 +21,7 @@ package com.aelitis.azureus.plugins.xmwebui;
 import java.io.File;
 import java.io.UnsupportedEncodingException;
 import java.net.URL;
+import java.net.URLConnection;
 import java.net.URLDecoder;
 import java.util.*;
 
@@ -996,8 +997,10 @@ public class TorrentGetMethods
 					// RPC < v13 -- Not Supported -- ignore
 
 					break;
-				case FIELD_TORRENT_FILE_COUNT:
+				case FIELD_TORRENT_FILE_COUNT_AZ:
 					// azRPC
+				case FIELD_TORRENT_FILE_COUNT:
+					// RPC v17
 
 					value = core_download.getNumFileInfos();
 
@@ -1077,6 +1080,20 @@ public class TorrentGetMethods
 				
 				case FIELD_TORRENT_SEQUENTIAL: {
 					value = download.getFlag(Download.FLAG_SEQUENTIAL_DOWNLOAD);
+					break;
+				}
+				
+				case FIELD_TORRENT_PRIMARY_MIME_TYPE: {
+					File file = download.getPrimaryFile().getFile();
+					value = URLConnection.guessContentTypeFromName(file.getName());
+					/* Files.probeContentType added in Android API 26
+					try {
+						value = Files.probeContentType(file.toPath());
+					} catch (IOException e) {
+						value = "application/octet-stream";
+					}
+				 */
+
 					break;
 				}
 				
@@ -1303,6 +1320,7 @@ public class TorrentGetMethods
 							args);
 
 					break;
+				case FIELD_TORRENT_FILE_COUNT_AZ:
 				case FIELD_TORRENT_FILE_COUNT:
 
 					value = download_stub.getStubFiles().length;

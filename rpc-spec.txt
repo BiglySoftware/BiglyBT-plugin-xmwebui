@@ -226,6 +226,7 @@
    errorString                 | string                      | tr_stat
    eta                         | number                      | tr_stat
    etaIdle                     | number                      | tr_stat
+   file-count                  | number                      | tr_info
    files                       | array (see below)           | n/a
 >>> BiglyBT
    file-fields                 | array of "files" fields to return in "files" map
@@ -265,14 +266,20 @@
                                | (when "peers" is in the "fields" list)
 <<< BiglyBT
    peersConnected              | number                      | tr_stat
+                               | Number of peers that we're connected to
    peersFrom                   | object (see below)          | n/a
+                               | How many peers we found out about from the tracker, or from pex,
+                               | or from incoming connections, or from our resume file.
    peersGettingFromUs          | number                      | tr_stat
+                               | Number of peers that we're sending data to
    peersSendingToUs            | number                      | tr_stat
+                               | Number of peers that are sending data to us
    percentDone                 | double                      | tr_stat
    pieces                      | string (see below)          | tr_torrent
    pieceCount                  | number                      | tr_info
    pieceSize                   | number                      | tr_info
    priorities                  | array (see below)           | n/a
+   primary-mime-type           | string                      | tr_torrent
    queuePosition               | number                      | tr_stat
    rateDownload (B/s)          | number                      | tr_stat
    rateUpload (B/s)            | number                      | tr_stat
@@ -898,6 +905,9 @@
          |         | yes       | torrent-set          | new arg "labels"
          |         | yes       | torrent-set          | new arg "editDate"
          |         | yes       | torrent-get          | new arg "format"
+   ------+---------+-----------+----------------------+-------------------------------
+   17    | 3.01    | yes       | torrent-get          | new arg "file-count"
+         |         | yes       | torrent-get          | new arg "primary-mime-type"
 
 
 5.1.  Upcoming Breakage
@@ -1208,3 +1218,73 @@ VZ.4 Tags
    <id>                 | string   Text associated with the id, in the current 
                         |          locale, or english if locale is missing id.
                         |          If id doesn't exist, it will not be returned.
+                        
+
+V2.7 Config
+
+  Method name: "config-get"
+  
+   Request arguments:
+
+   key                  | value type & description
+   ---------------------+-------------------------------------------------
+   "sections"           | array of string   Section ids to return 
+   "max-user-mode"      | number            Optional.
+                                            Limit to sections and parameters
+                                            with at least this mode           
+   "parameters"         | array of string   Optional. Parameters to return.
+
+   Response arguments if "sections" only specified:
+   
+   key                  | value type & description
+   ---------------------+-------------------------------------------------
+   "user-mode"
+   "sections"           | map of map. key is requested section id, value is map:
+         key                | value type & description
+         -------------------+---------------------------------------------------
+         various (TODO)
+
+   Response arguments if "parameters" specified:
+
+   key                  | value type & description
+   ---------------------+-------------------------------------------------
+   "parameters"         | map of map. key is requested parameter id, value is map:
+         key                | value type & description
+         -------------------+---------------------------------------------------
+         various (TODO)
+
+
+
+  Method name: "config-set"
+
+   Request arguments:
+
+   key                  | value type & description
+   ---------------------+-------------------------------------------------
+   "parameters"         | map   Key is parameter id to set, value type is
+                                dependant opon paramter type
+
+   Response arguments:
+   
+   key                  | value type & description
+   ---------------------+-------------------------------------------------
+   "success"            | map of map      Parameters that were successfully set.
+                                          Value map the same as "parameters" 
+                                          value in config-get
+   "error"              | map of string   Parameters that did not get set.
+                                          Key is parameter id, Value is error
+                                          description
+
+
+  Method name: "config-action"
+
+   Request arguments:
+
+   key                  | value type & description
+   ---------------------+-------------------------------------------------
+
+   Response arguments:
+   
+   key                  | value type & description
+   ---------------------+-------------------------------------------------
+

@@ -257,7 +257,10 @@ public class TransmissionVars
 
 	public static final String FIELD_TORRENT_PRIORITIES = "priorities";
 
-	public static final String FIELD_TORRENT_FILE_COUNT = "fileCount";
+	// RPC v17
+	public static final String FIELD_TORRENT_FILE_COUNT = "file-count";
+	
+	public static final String FIELD_TORRENT_FILE_COUNT_AZ = "fileCount";
 
 	public static final String FIELD_TORRENT_ETA = "eta";
 
@@ -352,6 +355,8 @@ public class TransmissionVars
 	public static final String FIELD_TORRENT_HAVE_VALID = "haveValid";
 
 	public static final String FIELD_TORRENT_HONORS_SESSION_LIMITS = "honorsSessionLimits";
+
+	public static final String FIELD_TORRENT_PRIMARY_MIME_TYPE = "primary-mime-type";
 
 	/** BiglyBT **/
 	public static final String FIELD_TORRENT_SEQUENTIAL = "sequential";

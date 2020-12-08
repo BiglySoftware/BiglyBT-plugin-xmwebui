@@ -145,6 +145,7 @@ MagnetDownload
 			}
 		}
 		
+		// XXX Must remain hardcoded
 		name = "Magnet download for '" + name + "'";
 
 		plugin.getID( this, true );

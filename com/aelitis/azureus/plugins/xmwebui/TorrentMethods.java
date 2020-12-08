@@ -633,6 +633,7 @@ public class TorrentMethods
 
 					if (delete_data) {
 
+						// This might take a very long time
 						download.remove(true, true);
 
 					} else {

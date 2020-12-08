@@ -343,7 +343,7 @@ public class SessionMethods
 			result.put("port", (long) tcp_port); // number     port number
 		}
 		if (canAdd("rpc-version", fields, all)) {
-			result.put("rpc-version", 16L); // number     the current RPC API version
+			result.put("rpc-version", 17L); // number     the current RPC API version
 		}
 		if (canAdd("rpc-version-minimum", fields, all)) {
 			result.put("rpc-version-minimum", 6L); // number     the minimum RPC API version supported
