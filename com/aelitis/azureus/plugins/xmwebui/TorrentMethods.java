@@ -18,16 +18,11 @@
 
 package com.aelitis.azureus.plugins.xmwebui;
 
-import java.io.File;
-import java.io.IOException;
-import java.net.MalformedURLException;
-import java.net.URL;
-import java.util.*;
-
 import com.biglybt.core.Core;
 import com.biglybt.core.CoreFactory;
 import com.biglybt.core.download.DownloadManagerState;
 import com.biglybt.core.global.GlobalManager;
+import com.biglybt.core.internat.MessageText;
 import com.biglybt.core.metasearch.Engine;
 import com.biglybt.core.tag.*;
 import com.biglybt.core.torrent.TOTorrent;
@@ -36,20 +31,29 @@ import com.biglybt.core.util.*;
 import com.biglybt.core.vuzefile.VuzeFile;
 import com.biglybt.core.vuzefile.VuzeFileComponent;
 import com.biglybt.core.vuzefile.VuzeFileHandler;
-import com.biglybt.pifimpl.local.PluginCoreUtils;
-import com.biglybt.pifimpl.local.torrent.TorrentImpl;
-import com.biglybt.util.MapUtils;
-
 import com.biglybt.pif.PluginInterface;
 import com.biglybt.pif.disk.DiskManagerFileInfo;
 import com.biglybt.pif.download.*;
 import com.biglybt.pif.torrent.*;
+import com.biglybt.pifimpl.local.PluginCoreUtils;
+import com.biglybt.pifimpl.local.torrent.TorrentImpl;
+import com.biglybt.util.MapUtils;
+
+import java.io.File;
+import java.io.IOException;
+import java.net.MalformedURLException;
+import java.net.URL;
+import java.util.*;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import static com.aelitis.azureus.plugins.xmwebui.StaticUtils.*;
 import static com.aelitis.azureus.plugins.xmwebui.TransmissionVars.*;
 
 public class TorrentMethods
 {
+	private static Pattern patMDName;
+
 	XMWebUIPlugin plugin;
 
 	private final PluginInterface pi;
@@ -59,8 +63,7 @@ public class TorrentMethods
 		this.pi = pi;
 	}
 
-	public void add(List<MagnetDownload> magnet_downloads, final Map args,
-			Map result, boolean xmlEscape)
+	public void add(final Map args, Map result, boolean xmlEscape)
 
 			throws IOException, DownloadException, TextualException {
 		/*
@@ -312,6 +315,7 @@ public class TorrentMethods
 			// hack due to core bug - have to add a bogus arg onto magnet uris else they fail to parse
 
 			String lc_url = url.toLowerCase(Locale.US);
+			String name = (String) args.get("name");
 
 			if (lc_url.startsWith("magnet:")) {
 
@@ -320,6 +324,11 @@ public class TorrentMethods
 			} else if (!lc_url.startsWith("http")) {
 
 				url = UrlUtils.parseTextForURL(url, true, true);
+				
+				if (name != null && !name.isEmpty() && url.startsWith("magnet:")
+						&& !url.contains("dn=")) {
+					url += "&dn=" + UrlUtils.encode(name);
+				}
 			}
 
 			byte[] hashFromMagnetURI = getHashFromMagnetURI(url);
@@ -354,160 +363,8 @@ public class TorrentMethods
 							"magnet");
 
 					if (is_magnet) {
-
-						TimerEvent magnet_event = null;
-
-						final Object[] f_result = {
-							null
-						};
-
-						try {
-							final AESemaphore sem = new AESemaphore("magnetsem");
-							final URL f_torrent_url = torrent_url;
-							final String f_name = (String) args.get("name");
-							magnet_event = SimpleTimer.addEvent("magnetcheck",
-									SystemTime.getOffsetTime(10 * 1000),
-									new TimerEventPerformer() {
-										@Override
-										public void perform(TimerEvent event) {
-											synchronized (f_result) {
-
-												if (f_result[0] != null) {
-
-													return;
-												}
-
-												MagnetDownload magnet_download = new MagnetDownload(
-														plugin, f_torrent_url, f_name);
-
-												byte[] hash = magnet_download.getTorrentHash();
-
-												synchronized (magnet_downloads) {
-
-													boolean duplicate = false;
-
-													Iterator<MagnetDownload> it = magnet_downloads.iterator();
-
-													while (it.hasNext()) {
-
-														MagnetDownload md = it.next();
-
-														if (hash.length > 0
-																&& Arrays.equals(hash, md.getTorrentHash())) {
-
-															if (md.getError() == null) {
-
-																duplicate = true;
-
-																magnet_download = md;
-
-																break;
-
-															} else {
-
-																it.remove();
-
-																plugin.addRecentlyRemoved(md);
-															}
-														}
-													}
-
-													if (!duplicate) {
-
-														magnet_downloads.add(magnet_download);
-													}
-												}
-
-												f_result[0] = magnet_download;
-											}
-
-											sem.release();
-										}
-									});
-
-							new AEThread2("magnetasync") {
-								@Override
-								public void run() {
-									try {
-										Torrent torrent = dl.download(Constants.DEFAULT_ENCODING);
-
-										synchronized (f_result) {
-
-											if (f_result[0] == null) {
-
-												f_result[0] = torrent;
-
-											} else {
-
-												MagnetDownload md = (MagnetDownload) f_result[0];
-
-												boolean already_removed;
-
-												synchronized (magnet_downloads) {
-
-													already_removed = !magnet_downloads.remove(md);
-												}
-
-												if (!already_removed) {
-
-													plugin.addRecentlyRemoved(md);
-
-													plugin.addTorrent(torrent, file_Download_dir,
-															add_stopped, add_listener);
-												}
-											}
-										}
-									} catch (Throwable e) {
-
-										synchronized (f_result) {
-
-											if (f_result[0] == null) {
-
-												f_result[0] = e;
-
-											} else {
-
-												MagnetDownload md = (MagnetDownload) f_result[0];
-
-												md.setError(e);
-											}
-										}
-									} finally {
-
-										sem.release();
-									}
-								}
-							}.start();
-
-							sem.reserve();
-
-							Object res;
-
-							synchronized (f_result) {
-
-								res = f_result[0];
-							}
-
-							if (res instanceof Torrent) {
-
-								torrent = (Torrent) res;
-
-							} else if (res instanceof Throwable) {
-
-								throw ((Throwable) res);
-
-							} else {
-
-								download = (MagnetDownload) res;
-								torrent = null;
-							}
-						} finally {
-
-							if (magnet_event != null) {
-
-								magnet_event.cancel();
-							}
-						}
+						download = addMagnetDownload(plugin, name, torrent_url, dl,
+								file_Download_dir, add_stopped, add_listener);
 					} else {
 
 						torrent = dl.download(Constants.DEFAULT_ENCODING);
@@ -530,13 +387,71 @@ public class TorrentMethods
 		Map<String, Object> torrent_details = new HashMap<>();
 
 		torrent_details.put("id", plugin.getID(download, true));
-		torrent_details.put("name", xmlEscape
-				? StaticUtils.escapeXML(download.getName()) : download.getName());
+		String name = getName(download);
+		torrent_details.put("name", xmlEscape ? escapeXML(name) : name);
 		torrent_details.put(FIELD_TORRENT_HASH_STRING,
 				ByteFormatter.encodeString(download.getTorrentHash()));
 
 		result.put(duplicate ? "torrent-duplicate" : "torrent-added",
 				torrent_details);
+	}
+	
+	/**
+	 * @return [ Torrent, DownloadStub ]
+	 */
+	private static MagnetDownload addMagnetDownload(XMWebUIPlugin plugin,
+			String name, URL torrent_url, TorrentDownloader dl, File file_Download_dir,
+			boolean add_stopped, DownloadWillBeAddedListener add_listener)
+	{
+		Map<HashWrapper2, MagnetDownload> magnet_downloads = plugin.getMagnetDownloads();
+
+		MagnetDownload magnetDL = new MagnetDownload(plugin, torrent_url, name);
+
+		HashWrapper2 hashWrapper = new HashWrapper2(magnetDL.getTorrentHash());
+
+		synchronized (magnet_downloads) {
+
+			MagnetDownload existingMD = magnet_downloads.get(hashWrapper);
+
+			if (existingMD != null && existingMD.getError() == null) {
+
+				magnetDL = existingMD;
+			} else {
+					
+				magnet_downloads.put(hashWrapper, magnetDL);
+
+				if (existingMD != null) {
+					plugin.addRecentlyRemoved(existingMD);
+				}
+			}
+		}
+
+		new AEThread2("magnetasync") {
+			@Override
+			public void run() {
+				try {
+					Torrent torrent = dl.download(Constants.DEFAULT_ENCODING);
+
+					plugin.addTorrent(torrent, file_Download_dir, add_stopped,
+							add_listener);
+
+					// Remove magnet entry.  Actual torrent added above will have a new id
+					MagnetDownload remove = magnet_downloads.remove(hashWrapper);
+					if (remove != null) {
+						plugin.addRecentlyRemoved(remove);
+					}
+				} catch (Throwable e) {
+					synchronized (magnet_downloads) {
+						MagnetDownload md = magnet_downloads.get(hashWrapper);
+						if (md != null) {
+							md.setError(e);
+						}
+					}
+				}
+			}
+		}.start();
+
+		return magnetDL;
 	}
 
 	private static void addTagToDownload(Download download, Object tagToAdd,
@@ -588,7 +503,7 @@ public class TorrentMethods
 		}
 	}
 
-	public void remove(List<MagnetDownload> magnet_downloads, Map args,
+	public void remove(Map<HashWrapper2, MagnetDownload> magnet_downloads, Map args,
 			Map result)
 			throws IOException {
 		/*
@@ -616,13 +531,22 @@ public class TorrentMethods
 
 					synchronized (magnet_downloads) {
 
-						magnet_downloads.remove(download_stub);
+						magnet_downloads.remove(
+								new HashWrapper2(download_stub.getTorrentHash()));
 					}
 
 					plugin.addRecentlyRemoved(download_stub);
 
 				} else {
 					Download download = download_stub.destubbify();
+
+					if (download.getFlag(Download.FLAG_METADATA_DOWNLOAD)) {
+						synchronized (magnet_downloads) {
+
+							magnet_downloads.remove(
+									new HashWrapper2(download_stub.getTorrentHash()));
+						}
+					}
 
 					int state = download.getState();
 
@@ -1342,4 +1266,38 @@ public class TorrentMethods
 		}
 	}
 
+	public static String getName(DownloadStub downloadStub) {
+		if (downloadStub instanceof Download) {
+			Download download = (Download) downloadStub;
+			String name = download.getName();
+			if (!download.getFlag(Download.FLAG_METADATA_DOWNLOAD) || name.startsWith(
+					"Magnet download")) {
+				return name;
+			}
+
+			if (patMDName == null) {
+				String mdName = MessageText.getString(
+						"MagnetPlugin.use.md.download.name");
+				String[] split = mdName.split("%1", -1);
+				StringBuilder mdNameRegex = new StringBuilder();
+				for (String s : split) {
+					if (s.length() > 0) {
+						mdNameRegex.append("\\Q").append(s).append("\\E");
+					} else {
+						mdNameRegex.append("(.*)");
+					}
+				}
+				patMDName = Pattern.compile(mdNameRegex.toString());
+			}
+
+			Matcher matcher = patMDName.matcher(name);
+			if (matcher.matches()) {
+				name = matcher.group(1);
+			}
+
+			return "Magnet download for '" + name + "'";
+		}
+
+		return downloadStub.getName();
+	}
 }

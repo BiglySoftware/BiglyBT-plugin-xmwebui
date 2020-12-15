@@ -43,6 +43,8 @@ MagnetDownload
 	
 	private Throwable error;
 	
+	private boolean visible = true;
+	
 	MagnetDownload(
 			XMWebUIPlugin plugin,
 			URL _magnet,
@@ -204,7 +206,7 @@ MagnetDownload
 	public long
 	getTorrentSize()
 	{
-		return( 16*1024 );	// dont know the size
+		return -1;	// don't know the size
 	}
 	
 	@Override
@@ -260,5 +262,13 @@ MagnetDownload
 		throws DownloadException, DownloadRemovalVetoException
 	{
 		
+	}
+
+	public void setVisible(boolean visible) {
+		this.visible = visible;
+	}
+
+	public boolean isVisible() {
+		return visible;
 	}
 }

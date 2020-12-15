@@ -22,20 +22,6 @@
 
 package com.aelitis.azureus.plugins.xmwebui;
 
-import java.io.*;
-import java.lang.reflect.Constructor;
-import java.lang.reflect.Method;
-import java.net.MalformedURLException;
-import java.net.URI;
-import java.net.URL;
-import java.text.DateFormat;
-import java.util.*;
-import java.util.zip.GZIPInputStream;
-
-import org.gudy.bouncycastle.util.encoders.Base64;
-import org.json.simple.JSONObject;
-import org.json.simple.JSONValue;
-
 import com.aelitis.azureus.plugins.remsearch.RemSearchPluginPageGenerator;
 import com.aelitis.azureus.plugins.remsearch.RemSearchPluginPageGeneratorAdaptor;
 import com.aelitis.azureus.plugins.remsearch.RemSearchPluginSearch;
@@ -60,13 +46,6 @@ import com.biglybt.core.util.*;
 import com.biglybt.core.vuzefile.VuzeFile;
 import com.biglybt.core.vuzefile.VuzeFileComponent;
 import com.biglybt.core.vuzefile.VuzeFileHandler;
-import com.biglybt.pifimpl.local.PluginCoreUtils;
-import com.biglybt.pifimpl.local.utils.resourcedownloader.ResourceDownloaderFactoryImpl;
-import com.biglybt.ui.webplugin.WebPlugin;
-import com.biglybt.util.JSONUtils;
-import com.biglybt.util.MapUtils;
-import com.biglybt.util.PlayUtils;
-
 import com.biglybt.pif.*;
 import com.biglybt.pif.config.ConfigParameter;
 import com.biglybt.pif.config.ConfigParameterListener;
@@ -87,6 +66,26 @@ import com.biglybt.pif.utils.Utilities;
 import com.biglybt.pif.utils.Utilities.JSONServer;
 import com.biglybt.pif.utils.resourcedownloader.ResourceDownloader;
 import com.biglybt.pif.utils.resourcedownloader.ResourceDownloaderAdapter;
+import com.biglybt.pifimpl.local.PluginCoreUtils;
+import com.biglybt.pifimpl.local.utils.resourcedownloader.ResourceDownloaderFactoryImpl;
+import com.biglybt.ui.webplugin.WebPlugin;
+import com.biglybt.util.JSONUtils;
+import com.biglybt.util.MapUtils;
+import com.biglybt.util.PlayUtils;
+
+import org.gudy.bouncycastle.util.encoders.Base64;
+import org.json.simple.JSONObject;
+import org.json.simple.JSONValue;
+
+import java.io.*;
+import java.lang.reflect.Constructor;
+import java.lang.reflect.Method;
+import java.net.MalformedURLException;
+import java.net.URI;
+import java.net.URL;
+import java.text.DateFormat;
+import java.util.*;
+import java.util.zip.GZIPInputStream;
 
 import static com.aelitis.azureus.plugins.xmwebui.TransmissionVars.*;
 
@@ -199,7 +198,7 @@ XMWebUIPlugin
     private int 			lifecycle_state = 0;
     private boolean			update_in_progress;
     
-    private final List<MagnetDownload>		magnet_downloads = new ArrayList<>();
+    private final Map<HashWrapper2, MagnetDownload>		magnet_downloads = new HashMap<>();
     
     private Object json_rpc_client;	// Object during transition to core support
     
@@ -792,6 +791,20 @@ XMWebUIPlugin
 	downloadAdded(
 		Download	download )
 	{
+		if (download.getFlag(Download.FLAG_METADATA_DOWNLOAD)) {
+			synchronized (magnet_downloads) {
+				MagnetDownload md = magnet_downloads.get(
+						new HashWrapper2(download.getTorrentHash()));
+				if (md != null) {
+					md.setVisible(false);
+
+					long id = md.getLongAttribute(t_id);
+					if (id > 0) {
+						download.setLongAttribute(t_id, id);
+					}
+				}
+			}
+		}
 	}
 	
 	// @see com.biglybt.pif.download.DownloadManagerListener#downloadRemoved(com.biglybt.pif.download.Download)
@@ -807,6 +820,18 @@ XMWebUIPlugin
 	addRecentlyRemoved(
 		DownloadStub	download )
 	{
+		if ((download instanceof Download)
+				&& ((Download) download).getFlag(Download.FLAG_METADATA_DOWNLOAD)) {
+			// Show our MagnetDownload when metadata torrent is removed.
+			// It will either be removed shortly, or show an error.
+			MagnetDownload magnetDownload = magnet_downloads.get(
+					new HashWrapper2(download.getTorrentHash()));
+			if (magnetDownload != null) {
+				magnetDownload.setVisible(true);
+				return;
+			}
+		}
+
 		synchronized( recently_removed ){			
 			
 			long id = getID( download, false );
@@ -1545,7 +1570,7 @@ XMWebUIPlugin
 					String agent = MapUtils.getMapString(request.getHeaders(), "User-Agent", "");
 					boolean xmlEscape = agent.startsWith("Mozilla/");
 
-					getTorrentMethods().add(magnet_downloads, args, result, xmlEscape);
+					getTorrentMethods().add(args, result, xmlEscape);
 
 					// this is handled within the torrent-add method: save_core_state = true;
 
@@ -2916,26 +2941,22 @@ XMWebUIPlugin
 	{
 		Download[] 		downloads1 = plugin_interface.getDownloadManager().getDownloads();
 		DownloadStub[] 	downloads2 = plugin_interface.getDownloadManager().getDownloadStubs();
-		
-		MagnetDownload[] 	downloads3;
-		
-		if ( include_magnet_dowloads ){
-			
-			synchronized( magnet_downloads ){
-				
-				downloads3 = magnet_downloads.toArray(new MagnetDownload[0]);
-			}
-		}else{
-			
-			downloads3 = new MagnetDownload[0];
-		}
-		
-		List<DownloadStub>	result = new ArrayList<>(downloads1.length + downloads2.length + downloads3.length);
+
+		List<DownloadStub> result = new ArrayList<>(
+				downloads1.length + downloads2.length + magnet_downloads.size());
 		
 		result.addAll( Arrays.asList( downloads1 ));
 		result.addAll( Arrays.asList( downloads2 ));
-		result.addAll( Arrays.asList( downloads3 ));
 
+		if (include_magnet_dowloads) {
+			synchronized (magnet_downloads) {
+				for (MagnetDownload md : magnet_downloads.values()) {
+					if (md.isVisible()) {
+						result.add(md);
+					}
+				}
+			}
+		}
 		
 		return( result );
 	}
@@ -2943,11 +2964,11 @@ XMWebUIPlugin
 	protected List<DownloadStub>
 	getDownloads(
 		Object		ids,
-		boolean		include_magnet_dowloads )
+		boolean		include_magnet_downloads )
 	{
 		List<DownloadStub>	downloads = new ArrayList<>();
 		
-		List<DownloadStub> 	all_downloads = getAllDownloads( include_magnet_dowloads );
+		List<DownloadStub> 	all_downloads = getAllDownloads( include_magnet_downloads );
 
 		List<Long>		selected_ids 	= new ArrayList<>();
 		List<String>	selected_hashes = new ArrayList<>();
@@ -3008,14 +3029,11 @@ XMWebUIPlugin
 			}else{
 				try{
 					Download download = destubbify( download_stub );
-				
-					if ( hide_ln && download.getFlag( Download.FLAG_LOW_NOISE )){
-						
-						continue;
-					}
-					
-					if ( download.getFlag( Download.FLAG_METADATA_DOWNLOAD )){
-						
+
+					// FLAG_METADATA_DOWNLOAD are FLAG_LOW_NOISE
+					if (hide_ln && download.getFlag(Download.FLAG_LOW_NOISE) && (
+							!include_magnet_downloads || !download.getFlag(
+									Download.FLAG_METADATA_DOWNLOAD))) {
 						continue;
 					}
 					
@@ -3771,6 +3789,14 @@ XMWebUIPlugin
 
 	private Number getTrackerID(TrackerPeerSource source) {
 		return (long) ((source.getName().hashCode() << 4L) + source.getType());
+	}
+	
+	public PluginInterface getPluginInterface() {
+		return plugin_interface;
+	}
+
+	public Map<HashWrapper2, MagnetDownload> getMagnetDownloads() {
+		return magnet_downloads;
 	}
 
 	//////////////////////////////////////////////////////////////////////////////

@@ -18,15 +18,6 @@
 
 package com.aelitis.azureus.plugins.xmwebui;
 
-import java.io.File;
-import java.io.UnsupportedEncodingException;
-import java.net.URL;
-import java.net.URLConnection;
-import java.net.URLDecoder;
-import java.util.*;
-
-import org.gudy.bouncycastle.util.encoders.Base64;
-
 import com.biglybt.core.category.Category;
 import com.biglybt.core.category.CategoryManager;
 import com.biglybt.core.config.COConfigurationManager;
@@ -43,6 +34,11 @@ import com.biglybt.core.tag.*;
 import com.biglybt.core.tracker.TrackerPeerSource;
 import com.biglybt.core.tracker.client.*;
 import com.biglybt.core.util.*;
+import com.biglybt.pif.disk.DiskManagerFileInfo;
+import com.biglybt.pif.download.*;
+import com.biglybt.pif.download.DownloadStub.DownloadStubFile;
+import com.biglybt.pif.torrent.Torrent;
+import com.biglybt.pif.tracker.web.TrackerWebPageRequest;
 import com.biglybt.pifimpl.local.PluginCoreUtils;
 import com.biglybt.plugin.startstoprules.defaultplugin.DefaultRankCalculator;
 import com.biglybt.plugin.startstoprules.defaultplugin.StartStopRulesDefaultPlugin;
@@ -50,11 +46,14 @@ import com.biglybt.util.JSONUtils;
 import com.biglybt.util.MapUtils;
 import com.biglybt.util.PlayUtils;
 
-import com.biglybt.pif.disk.DiskManagerFileInfo;
-import com.biglybt.pif.download.*;
-import com.biglybt.pif.download.DownloadStub.DownloadStubFile;
-import com.biglybt.pif.torrent.Torrent;
-import com.biglybt.pif.tracker.web.TrackerWebPageRequest;
+import org.gudy.bouncycastle.util.encoders.Base64;
+
+import java.io.File;
+import java.io.UnsupportedEncodingException;
+import java.net.URL;
+import java.net.URLConnection;
+import java.net.URLDecoder;
+import java.util.*;
 
 import static com.aelitis.azureus.plugins.xmwebui.StaticUtils.*;
 import static com.aelitis.azureus.plugins.xmwebui.TransmissionVars.*;
@@ -118,6 +117,8 @@ public class TorrentGetMethods
 		if (fields == null) {
 
 			fields = new ArrayList<>();
+		} else {
+			Collections.sort(fields);
 		}
 
 		Object ids = args.get("ids");
@@ -139,11 +140,13 @@ public class TorrentGetMethods
 		String agent = MapUtils.getMapString(request.getHeaders(), "User-Agent",
 				"");
 		boolean xmlEscape = agent.startsWith("Mozilla/");
+		String format = MapUtils.getMapString(args, "format", "objects");
+		boolean isTableFormat = format.equalsIgnoreCase("table");
 
 		for (DownloadStub download_stub : downloads) {
 			if (download_stub.isStub()) {
 				method_Torrent_Get_Stub(plugin, request, args, fields, torrent_info,
-						download_stub, file_fields, xmlEscape);
+						download_stub, file_fields, xmlEscape, isTableFormat);
 			} else {
 				method_Torrent_Get_NonStub(plugin, request, args, fields, torrent_info,
 						(Download) download_stub, file_fields, xmlEscape);
@@ -205,9 +208,7 @@ public class TorrentGetMethods
 			}
 		}
 
-		String format = MapUtils.getMapString(args, "format", "objects");
-
-		if (format.equalsIgnoreCase("table")) {
+		if (isTableFormat) {
 			List<Collection<Object>> torrents = new ArrayList<>();
 
 			result.put("torrents", torrents);
@@ -230,7 +231,20 @@ public class TorrentGetMethods
 			torrents.addAll(torrent_info.values());
 		}
 	}
+	
+	private static boolean hasAnyField(List<String> sortedFieldList,
+			String... fields) {
+		for (String field : fields) {
+			if (Collections.binarySearch(sortedFieldList, field) >= 0) {
+				return true;
+			}
+		}
+		return false;
+	}
 
+	/**
+	 * @param fields Sorted
+	 */
 	private static void method_Torrent_Get_NonStub(XMWebUIPlugin plugin,
 			TrackerWebPageRequest request, Map<String, Object> args,
 			List<String> fields, Map<Long, Map<String, Object>> torrent_info,
@@ -253,6 +267,27 @@ public class TorrentGetMethods
 		DiskManager 	dm = core_download.getDiskManager();
 
 		DownloadStats stats = download.getStats();
+		DownloadManagerState downloadState = core_download.getDownloadState();
+
+		boolean isMetaDownload = false;
+		long metaDLSize = -1;
+		long metaDLDownloaded = 0;
+
+		if (hasAnyField(fields, FIELD_TORRENT_LEFT_UNTIL_DONE,
+				FIELD_TORRENT_PERCENT_DONE, FIELD_TORRENT_TOTAL_SIZE,
+				FIELD_TORRENT_METADATA_PERCENT_DONE, FIELD_TORRENT_SIZE_WHEN_DONE)) {
+			if (downloadState.getFlag(Download.FLAG_METADATA_DOWNLOAD)) {
+				isMetaDownload = true;
+				metaDLSize = downloadState.getLongAttribute(
+						"magnet.torrent.size");
+				if (metaDLSize == 0) {
+					metaDLSize = -1;
+				}
+				metaDLDownloaded = downloadState.getLongAttribute(
+						"magnet.torrent.downloaded");
+			}
+		}
+
 
 		Map<String, Object> torrent = new HashMap<>(fields.size() + 8);
 
@@ -262,7 +297,8 @@ public class TorrentGetMethods
 		int peers_to_us = 0;
 		 
 		
-		if ( fields.contains( "peersGettingFromUs" ) || fields.contains( "peersSendingToUs" )) {
+		if (hasAnyField(fields, FIELD_TORRENT_PEERS_GETTING_FROM_US,
+				FIELD_TORRENT_PEERS_SENDING_TO_US)) {
 
 			if (pm != null) {
 	
@@ -288,7 +324,8 @@ public class TorrentGetMethods
 		long haveValid			= 0;
 		long desiredAvailable 	= 0;
 		
-		if ( fields.contains(FIELD_TORRENT_DESIRED_AVAILABLE) || fields.contains(FIELD_TORRENT_HAVE_VALID )) {
+		if (hasAnyField(fields, FIELD_TORRENT_DESIRED_AVAILABLE,
+				FIELD_TORRENT_HAVE_VALID)) {
 
 			DiskManagerPiece[] dmPieces_maybe_null;
 			
@@ -388,7 +425,7 @@ public class TorrentGetMethods
 					// RPC v0
 					// addedDate                   | number                      | tr_stat
 					/** When the torrent was first added. */
-					value = core_download.getDownloadState().getLongParameter(
+					value = downloadState.getLongParameter(
 							DownloadManagerState.PARAM_DOWNLOAD_ADDED_TIME) / 1000;
 
 					break;
@@ -452,7 +489,7 @@ public class TorrentGetMethods
 					// doneDate                    | number                      | tr_stat
 					/** When the torrent finished downloading. */
 					if (core_download.isDownloadComplete(false)) {
-						value = core_download.getDownloadState().getLongParameter(
+						value = downloadState.getLongParameter(
 								DownloadManagerState.PARAM_DOWNLOAD_COMPLETED_TIME) / 1000;
 					} else {
 						// TODO: Verify what value to send when not complete
@@ -625,21 +662,27 @@ public class TorrentGetMethods
 
 					break;
 				}
-				case "leechers":
+				case FIELD_TORRENT_PEER_COUNT:
 					// Removed in RPC v7
 					value = pm == null ? 0 : pm.getNbPeers();
 
 					break;
-				case FIELD_TORRENT_LEFT_UNTIL_DONE:
+				case FIELD_TORRENT_LEFT_UNTIL_DONE: {
 					// RPC v0
 					// leftUntilDone               | number                      | tr_stat
 
 					/** Byte count of how much data is left to be downloaded until we've got
 					 all the pieces that we want. [0...tr_info.sizeWhenDone] */
 
+					if (isMetaDownload) {
+						value = metaDLSize > 0 ? metaDLSize - metaDLDownloaded : -1;
+						break;
+					}
+
 					value = core_download.getStats().getRemainingExcludingDND();
 
 					break;
+				}
 				case "magnetLink":
 					// TODO RPC v7
 					// magnetLink                  | number                      | n/a
@@ -661,7 +704,7 @@ public class TorrentGetMethods
 					value = 0;
 
 					break;
-				case "metadataPercentComplete":
+				case FIELD_TORRENT_METADATA_PERCENT_DONE: {
 					// RPC v7: TODO
 					// metadataPercentComplete     | double                      | tr_stat
 					/**
@@ -671,12 +714,18 @@ public class TorrentGetMethods
 					 * Range is [0..1] 
 					 */
 					// RPC v7
+
+					if (isMetaDownload) {
+						value = metaDLSize > 0 ? (float) metaDLDownloaded / metaDLSize : 0.0f;
+						break;
+					}
+
 					value = 1.0f;
 
 					break;
-				case "name":
-
-					value = download.getName();
+				}
+				case FIELD_TORRENT_NAME:
+					value = TorrentMethods.getName(download);
 
 					break;
 				case "peer-limit":
@@ -692,7 +741,7 @@ public class TorrentGetMethods
 					value = torrentGet_peers(core_download, peer_fields);
 
 					break;
-				case "peersConnected":
+				case FIELD_TORRENT_PEERS_CONNECTED:
 					// peersConnected              | number                      | tr_stat
 
 					/** Number of peers that we're connected to */
@@ -704,19 +753,19 @@ public class TorrentGetMethods
 					value = torrentGet_peersFrom(pm);
 
 					break;
-				case "peersGettingFromUs":
+				case FIELD_TORRENT_PEERS_GETTING_FROM_US:
 					// peersGettingFromUs          | number                      | tr_stat
 
 					value = peers_from_us;
 
 					break;
-				case "peersSendingToUs":
+				case FIELD_TORRENT_PEERS_SENDING_TO_US:
 					// peersSendingToUs            | number                      | tr_stat
 
 					value = peers_to_us;
 
 					break;
-				case FIELD_TORRENT_PERCENT_DONE:
+				case FIELD_TORRENT_PERCENT_DONE: {
 					// RPC v5
 					// percentDone                 | double                      | tr_stat
 					/**
@@ -724,11 +773,16 @@ public class TorrentGetMethods
 					 * from percentComplete if the user wants only some of the torrent's files.
 					 * Range is [0..1]
 					 */
+					if (isMetaDownload) {
+						value = metaDLSize > 0 ? (float) metaDLDownloaded / metaDLSize : 0.0f;
+						break;
+					}
 
 					value = core_download.getStats().getPercentDoneExcludingDND()
 							/ 1000.0f;
 
 					break;
+				}
 				case "pieces":
 					// RPC v5
 					value = torrentGet_pieces(core_download);
@@ -808,7 +862,7 @@ public class TorrentGetMethods
 					value = TR_RATIOLIMIT_GLOBAL;
 
 					break;
-				case FIELD_TORRENT_SIZE_WHEN_DONE:
+				case FIELD_TORRENT_SIZE_WHEN_DONE: {
 					// sizeWhenDone                | number                      | tr_stat
 					/**
 					 * Byte count of all the piece data we'll have downloaded when we're done,
@@ -816,9 +870,15 @@ public class TorrentGetMethods
 					 * if only some of the torrent's files are wanted.
 					 * [0...tr_info.totalSize] 
 					 **/
+					if (isMetaDownload) {
+						value = metaDLSize;
+						break;
+					}
+
 					value = core_download.getStats().getSizeExcludingDND();
 
 					break;
+				}
 				case FIELD_TORRENT_DATE_STARTED:
 					/** When the torrent was last started. */
 					value = stats.getTimeStarted() / 1000;
@@ -853,10 +913,15 @@ public class TorrentGetMethods
 					value = torrentGet_trackerStats(core_download);
 
 					break;
-				case "totalSize":
+				case FIELD_TORRENT_TOTAL_SIZE: {
+
+					if (isMetaDownload) {
+						value = metaDLSize;
+						break;
+					}
 
 					value = t.getSize();
-
+				}
 					break;
 				case "torrentFile":
 					// torrentFile                 | string                      | tr_info
@@ -927,7 +992,7 @@ public class TorrentGetMethods
 					// Vuze Specific?
 					value = (long) download.getUploadRateLimitBytesPerSecond();
 					break;
-				case "seeders":
+				case FIELD_TORRENT_SEED_COUNT:
 					// Removed in RPC v7
 					value = pm == null ? -1 : pm.getNbSeeds();
 
@@ -1115,10 +1180,13 @@ public class TorrentGetMethods
 		} // for fields		
 	}
 
+	/**
+	 * @param fields Sorted
+	 */
 	private static void method_Torrent_Get_Stub(XMWebUIPlugin plugin,
 			TrackerWebPageRequest request, Map args, List<String> fields,
 			Map<Long, Map<String, Object>> torrent_info, DownloadStub download_stub,
-			List<String> file_fields, boolean xmlEscape) {
+			List<String> file_fields, boolean xmlEscape, boolean includeNullValues) {
 
 		Map<String, Object> torrent = new LinkedHashMap<>();
 
@@ -1126,16 +1194,13 @@ public class TorrentGetMethods
 
 		torrent_info.put(download_id, torrent);
 
-		boolean is_magnet_download = download_stub instanceof MagnetDownload;
+		boolean isMagnet = download_stub instanceof MagnetDownload;
 
-		long status = 0;
 		long error = TR_STAT_OK;
 		String error_str = "";
-		String created_by = "";
-		long create_date = 0;
-		float md_comp = 1.0f;
-
-		if (is_magnet_download) {
+		
+		if (isMagnet && hasAnyField(fields, FIELD_TORRENT_ERROR,
+				FIELD_TORRENT_ERROR_STRING, FIELD_TORRENT_TAG_UIDS)) {
 
 			MagnetDownload md = (MagnetDownload) download_stub;
 
@@ -1145,11 +1210,7 @@ public class TorrentGetMethods
 
 			if (e == null) {
 
-				status = 4;
-
-				md_comp = 0.0f;
-
-				if (fields.contains(FIELD_TORRENT_TAG_UIDS)) {
+				if (hasAnyField(fields, FIELD_TORRENT_TAG_UIDS)) {
 					List<Long> listTags = new ArrayList<>();
 					Tag tag = getTagFromState(Download.ST_DOWNLOADING, false);
 					if (tag != null) {
@@ -1165,8 +1226,6 @@ public class TorrentGetMethods
 				}
 
 			} else {
-
-				status = 0;
 
 				error = TR_STAT_LOCAL_ERROR;
 
@@ -1218,7 +1277,7 @@ public class TorrentGetMethods
 							+ error_str.substring(1);
 				}
 
-				if (fields.contains(FIELD_TORRENT_TAG_UIDS)) {
+				if (hasAnyField(fields, FIELD_TORRENT_TAG_UIDS)) {
 					List<Long> listTags = new ArrayList<>();
 					Tag tag = getTagFromState(Download.ST_STOPPED, true);
 					if (tag != null) {
@@ -1228,81 +1287,16 @@ public class TorrentGetMethods
 					torrent.put(FIELD_TORRENT_TAG_UIDS, listTags);
 				}
 			}
-
-			created_by = "Vuze";
-			create_date = md.getCreateTime() / 1000;
-
 		}
-
-		long size = download_stub.getTorrentSize();
 
 		//System.out.println( fields );
 
-		// @formatter:off
-		Object[][] stub_defs = {
-				{ FIELD_TORRENT_DATE_ACTIVITY, 0 },
-				{ "activityDateRelative",0 },
-				{ FIELD_TORRENT_DATE_ADDED, is_magnet_download?create_date:0 },
-				{ FIELD_TORRENT_COMMENT, is_magnet_download?"Metadata Download": "Download Archived" },
-				{ FIELD_TORRENT_CORRUPT_EVER, 0 },
-				{ FIELD_TORRENT_CREATOR, created_by },
-				{ FIELD_TORRENT_DATE_CREATED, create_date },
-				{ FIELD_TORRENT_DESIRED_AVAILABLE, 0 },
-				//{ "downloadDir", "" },
-				{ FIELD_TORRENT_DOWNLOADED_EVER, 0 },
-				{ FIELD_TORRENT_ERROR, error },
-				{ FIELD_TORRENT_ERROR_STRING, error_str },
-				{ FIELD_TORRENT_ETA, TR_ETA_NOT_AVAIL },
-				//{ "fileStats", "" },
-				//{ "files", "" },
-				//{ FIELD_TORRENT_HASH, "" },
-				{ FIELD_TORRENT_HAVE_UNCHECKED, 0 },
-				//{ "haveValid", "" },
-				//{ "id", "" },
-				{ "isFinished", !is_magnet_download },
-				{ "isPrivate", false },
-				{ "isStalled", false },
-				{ FIELD_TORRENT_LEFT_UNTIL_DONE, is_magnet_download?size:0 },	// leftUntilDone is used to mark downloads as incomplete
-				{ "metadataPercentComplete",md_comp },
-				//{ "name", "" },
-				{ FIELD_TORRENT_PEERS, new ArrayList() },
-				{ "peersConnected", 0 },
-				{ "peersGettingFromUs", 0 },
-				{ "peersSendingToUs", "" },
-				{ FIELD_TORRENT_PERCENT_DONE, is_magnet_download?0.0f:100.0f },
-				{ "pieceCount", 1 },
-				{ "pieceSize", size==0?1:size },
-				{ FIELD_TORRENT_POSITION, 0 },
-				{ FIELD_TORRENT_RATE_DOWNLOAD, 0 },
-				{ FIELD_TORRENT_RATE_UPLOAD, 0 },
-				{ "recheckProgress", 0.0f },
-				{ "seedRatioLimit", 1.0f },
-				{ "seedRatioMode", TR_RATIOLIMIT_GLOBAL },
-				//{ "sizeWhenDone", "" },
-				{ FIELD_TORRENT_DATE_STARTED, is_magnet_download?create_date:0 },
-				{ FIELD_TORRENT_STATUS, status },
-				//{ "totalSize", "" },
-				{ "trackerStats", new ArrayList() },
-				{ "trackers", new ArrayList() },
-				{ FIELD_TORRENT_UPLOAD_RATIO, 0.0f },
-				{ FIELD_TORRENT_UPLOADED_EVER, 0 },
-				{ "webseedsSendingToUs", 0 },
-				{ "torrentFile", "" }
-		};
-		// @formatter:on
-
-		Map<String, Object> stub_def_map = new HashMap<>();
-
-		for (Object[] d : stub_defs) {
-			stub_def_map.put((String) d[0], d[1]);
-		}
-
 		for (String field : fields) {
 
-			Object value = stub_def_map.get(field);
+			Object value = null;
 
 			switch (field) {
-				case "id":
+				case FIELD_TORRENT_ID:
 
 					value = download_id;
 
@@ -1339,22 +1333,22 @@ public class TorrentGetMethods
 					break;
 				case FIELD_TORRENT_HAVE_VALID:
 
-					value = is_magnet_download ? 0 : size;
+					value = isMagnet ? 0 : download_stub.getTorrentSize();
 
 					break;
 				case FIELD_TORRENT_NAME:
 
-					value = download_stub.getName();
+					value = TorrentMethods.getName(download_stub);
 
 					break;
 				case FIELD_TORRENT_SIZE_WHEN_DONE:
 
-					value = size;
+					value = download_stub.getTorrentSize();
 
 					break;
 				case "totalSize":
 
-					value = size;
+					value =  download_stub.getTorrentSize();
 
 					break;
 				case FIELD_TORRENT_TAG_UIDS:
@@ -1366,7 +1360,7 @@ public class TorrentGetMethods
 					TagManager tm = TagManagerFactory.getTagManager();
 
 					if (listTags.size() == 0) {
-						Tag tag = getTagFromState(Download.ST_STOPPED, !is_magnet_download);
+						Tag tag = getTagFromState(Download.ST_STOPPED, !isMagnet);
 						if (tag != null) {
 							listTags.add(tag.getTagUID());
 						}
@@ -1381,7 +1375,7 @@ public class TorrentGetMethods
 					// 11, "tag.type.ds.incomp"
 					// 10, incomplete
 					Tag tag = tm.getTagType(TagType.TT_DOWNLOAD_STATE).getTag(
-							is_magnet_download ? 11 : 10);
+							isMagnet ? 11 : 10);
 					if (tag != null) {
 						listTags.add(tag.getTagUID());
 					}
@@ -1398,9 +1392,168 @@ public class TorrentGetMethods
 
 					value = listTags;
 					break;
+
+				case FIELD_TORRENT_DATE_ACTIVITY:
+					value = isMagnet ? System.currentTimeMillis() / 1000 : 0;
+					break;
+
+				case "activityDateRelative":
+				case FIELD_TORRENT_CORRUPT_EVER:
+				case FIELD_TORRENT_DESIRED_AVAILABLE:
+				case FIELD_TORRENT_DOWNLOADED_EVER:
+				case FIELD_TORRENT_HAVE_UNCHECKED:
+				case FIELD_TORRENT_PEERS_CONNECTED:
+				case FIELD_TORRENT_PEERS_GETTING_FROM_US:
+				case FIELD_TORRENT_PEERS_SENDING_TO_US:
+				case FIELD_TORRENT_SEED_COUNT:
+				case FIELD_TORRENT_PEER_COUNT:
+				case FIELD_TORRENT_POSITION:
+				case FIELD_TORRENT_RATE_UPLOAD:
+				case FIELD_TORRENT_RATE_DOWNLOAD:
+				case FIELD_TORRENT_UPLOADED_EVER:
+				case "webseedsSendingToUs":
+					value = 0;
+
+					break;
+				case FIELD_TORRENT_CREATOR:
+					value = isMagnet ? plugin.getPluginInterface().getApplicationName() : "";
+					break;
+
+				case FIELD_TORRENT_ERROR:
+					value = error;
+					break;
+
+				case FIELD_TORRENT_ERROR_STRING:
+					value = error_str;
+					break;
+
+				case FIELD_TORRENT_ETA:
+					value = TR_ETA_NOT_AVAIL;
+					break;
+
+				case "isFinished":
+					value = !isMagnet;
+					break;
+
+				case "isStalled":
+				case "isPrivate":
+					value = false;
+					break;
+
+				case "metadataPercentComplete":
+					if (isMagnet) {
+						// TODO
+						MagnetDownload md = (MagnetDownload) download_stub;
+						value = md.getError() == null ? 0.0f : 1.0f;
+					} else {
+						value = 1.0f;
+					}
+					break;
+
+				case FIELD_TORRENT_PERCENT_DONE:
+					value = isMagnet ? 0.0f : 100.0f;
+					break;
+
+				case FIELD_TORRENT_LEFT_UNTIL_DONE:
+					// leftUntilDone is used to mark downloads as incomplete
+					value = isMagnet ? download_stub.getTorrentSize() : 0;
+					break;
+
+				case "pieceCount":
+					value = 1;
+					break;
+
+				case "pieceSize": {
+					// recheckProgress             | double                      | tr_stat
+					long size = download_stub.getTorrentSize();
+					value = size == 0 ? 1 : size;
+
+					break;
+				}
+
+				case "recheckProgress":
+					// recheckProgress             | double                      | tr_stat
+					value = 0.0f;
+
+					break;
+
+				case "seedIdleLimit":
+					// RPC v10
+					// "seedIdleLimit"       | number     torrent-level number of minutes of seeding inactivity
+					value = 0;
+
+					break;
+				case "seedIdleMode":
+					// RPC v10: Not used, always TR_IDLELIMIT_GLOBAL
+					// "seedIdleMode"        | number     which seeding inactivity to use.  See tr_inactvelimit
+					value = TR_IDLELIMIT_GLOBAL;
+
+					break;
+				case "seedRatioLimit":
+					// RPC v5
+					// "seedRatioLimit"      | double     torrent-level seeding ratio
+					value = 1.0f;
+
+					break;
+				case "seedRatioMode":
+					// RPC v5: Not used, always Global
+					// seedRatioMode               | number                      | tr_ratiolimit
+					value = TR_RATIOLIMIT_GLOBAL;
+					break;
+
+				case FIELD_TORRENT_DATE_STARTED:
+				case FIELD_TORRENT_DATE_CREATED:
+					value = isMagnet
+							? ((MagnetDownload) download_stub).getCreateTime() / 1000 : 0;
+					break;
+
+				case FIELD_TORRENT_STATUS:
+					if (!isMagnet) {
+						value = 0;
+						break;
+					}
+					MagnetDownload md = (MagnetDownload) download_stub;
+					value = md.getError() == null ? 4 : 0;
+
+					break;
+
+				case "trackers":
+				case "trackerStats":
+				case FIELD_TORRENT_PEERS:
+
+					value = Collections.emptyList();
+
+					break;
+
+				case FIELD_TORRENT_UPLOAD_RATIO:
+					// uploadRatio                 | double                      | tr_stat
+					value = 0.0;
+					break;
+
+				case "torrentFile":
+					// torrentFile                 | string                      | tr_info
+					// Path to torrent
+					value = "";
+					break;
+
+				case FIELD_TORRENT_DATE_ADDED:
+					// RPC v0
+					// addedDate                   | number                      | tr_stat
+					// When the torrent was first added.
+					value = isMagnet
+							? ((MagnetDownload) download_stub).getCreateTime() / 1000 : 0;
+					break;
+
+				case FIELD_TORRENT_COMMENT:
+					// RPC v0
+					// comment                     | string                      | tr_info
+					value = isMagnet ? "Metadata Download"
+							: "Download Archived";
+					break;
+
 			}
 
-			if (value != null) {
+			if (includeNullValues || value != null) {
 
 				if (xmlEscape && (value instanceof String)) {
 
