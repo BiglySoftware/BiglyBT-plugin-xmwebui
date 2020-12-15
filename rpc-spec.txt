@@ -1,9 +1,9 @@
 1.  Introduction
 
-   This document describes a protocol for interacting with Vuze and Transmission
-   sessions remotely.  Updated from 
-   https://trac.transmissionbt.com/browser/trunk/extras/rpc-spec.txt to include
-   Vuze additions.
+   This document describes a protocol for interacting with BiglyBT and
+   Transmission sessions remotely.  Updated from 
+   https://github.com/transmission/transmission/blob/master/extras/rpc-spec.txt
+   to include BiglyBT additions.
 
 1.1  Terminology
 
@@ -39,7 +39,7 @@
 
 2.2.  Responses
 
-   Reponses support three keys:
+   Responses support three keys:
 
    (1) A required "result" string whose value MUST be "success" on success,
        or an error string on failure.
@@ -253,10 +253,13 @@
    isStalled                   | boolean                     | tr_stat
    labels                      | array (see below)           | tr_torrent
    leftUntilDone               | number                      | tr_stat
-   magnetLink                  | number                      | n/a
+   magnetLink                  | string                      | n/a
    manualAnnounceTime          | number                      | tr_stat
    maxConnectedPeers           | number                      | tr_torrent
-   metadataPercentComplete     | double                      | tr_stat
+   metadataPercentComplete     | double [0-1]                | tr_stat
+                               | How much of the metadata the torrent has.
+                               | For torrents added from a .torrent this will always be 1.
+                               | For magnet links, this number will from from 0 to 1 as the metadata is downloaded.
    name                        | string                      | tr_info
    peer-limit                  | number                      | tr_torrent
    peers                       | array (see below)           | n/a
@@ -903,8 +906,8 @@
          |         | yes       | session-get          | new arg "session-id"
          |         | yes       | torrent-get          | new arg "labels"
          |         | yes       | torrent-set          | new arg "labels"
-         |         | yes       | torrent-set          | new arg "editDate"
-         |         | yes       | torrent-get          | new arg "format"
+         |         | yes       | torrent-get          | new arg "editDate"
+         |         | yes       | torrent-get          | new request arg "format"
    ------+---------+-----------+----------------------+-------------------------------
    17    | 3.01    | yes       | torrent-get          | new arg "file-count"
          |         | yes       | torrent-get          | new arg "primary-mime-type"
