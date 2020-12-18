@@ -275,7 +275,10 @@ public class TorrentGetMethods
 
 		if (hasAnyField(fields, FIELD_TORRENT_LEFT_UNTIL_DONE,
 				FIELD_TORRENT_PERCENT_DONE, FIELD_TORRENT_TOTAL_SIZE,
-				FIELD_TORRENT_METADATA_PERCENT_DONE, FIELD_TORRENT_SIZE_WHEN_DONE)) {
+				FIELD_TORRENT_METADATA_PERCENT_DONE, FIELD_TORRENT_SIZE_WHEN_DONE,
+				FIELD_TORRENT_FILE_COUNT, FIELD_TORRENT_FILE_COUNT_AZ,
+				FIELD_TORRENT_FILES, FIELD_TORRENT_FILESTATS,
+				FIELD_TORRENT_PRIORITIES)) {
 			if (downloadState.getFlag(Download.FLAG_METADATA_DOWNLOAD)) {
 				isMetaDownload = true;
 				metaDLSize = downloadState.getLongAttribute(
@@ -570,6 +573,11 @@ public class TorrentGetMethods
 					break;
 				case FIELD_TORRENT_FILES:
 					// RPC v0
+					
+					if (isMetaDownload) {
+						value = Collections.emptyList();
+						break;
+					}
 
 					String host = (String) request.getHeaders().get("host");
 
@@ -585,7 +593,8 @@ public class TorrentGetMethods
 				case FIELD_TORRENT_FILESTATS:
 					// RPC v5
 
-					value = torrentGet_fileStats(download, file_fields, args);
+					value = isMetaDownload ? 0
+							: torrentGet_fileStats(download, file_fields, args);
 
 					break;
 				case FIELD_TORRENT_HASH_STRING:
@@ -799,7 +808,8 @@ public class TorrentGetMethods
 					break;
 				case FIELD_TORRENT_PRIORITIES:
 
-					value = torrentGet_priorities(download);
+					value = isMetaDownload ? Collections.emptyList()
+							: torrentGet_priorities(download);
 
 					break;
 				case FIELD_TORRENT_POSITION:
@@ -1067,7 +1077,7 @@ public class TorrentGetMethods
 				case FIELD_TORRENT_FILE_COUNT:
 					// RPC v17
 
-					value = core_download.getNumFileInfos();
+					value = isMetaDownload ? 0 : core_download.getNumFileInfos();
 
 					break;
 				case "speedHistory":
