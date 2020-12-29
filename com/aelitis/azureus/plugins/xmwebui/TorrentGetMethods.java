@@ -1760,7 +1760,7 @@ public class TorrentGetMethods
 			map.put(FIELD_FILESTATS_BYTES_COMPLETED, file.getDownloaded());
 		}
 		if (canAdd(FIELD_FILESTATS_WANTED, sortedFields, all)) {
-			map.put(FIELD_FILESTATS_WANTED, !file.isSkipped());
+			map.put(FIELD_FILESTATS_WANTED, !file.isSkipped() && !file.isDeleted());
 		}
 
 		if (canAdd(FIELD_FILESTATS_PRIORITY, sortedFields, all)) {
@@ -2766,7 +2766,7 @@ public class TorrentGetMethods
 		DiskManagerFileInfo[] files = download.getDiskManagerFileInfo();
 
 		for (DiskManagerFileInfo file : files) {
-			list.add(!file.isSkipped());
+			list.add(!file.isSkipped() && !file.isDeleted());
 		}
 
 		return list;
