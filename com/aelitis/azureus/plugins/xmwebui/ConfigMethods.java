@@ -556,8 +556,6 @@ public class ConfigMethods
 			final ParamGroupInfo pgInfo, Stack<ParamGroupInfo> pgInfoStack,
 			int maxUserModeRequested) {
 
-		List<Map<String, Object>> list = pgInfo.list;
-
 		Map<String, Object> out = new HashMap<>();
 		out.put("enabled", param.isEnabled());
 		int minimumRequiredUserMode = param.getMinimumRequiredUserMode();
@@ -573,21 +571,28 @@ public class ConfigMethods
 			pgInfoStack.push(pgInfo.copy());
 
 			pgInfo.reset(paramGroup);
-			if (rid == null) {
-				pgInfo.list = list;
-			}
 
-			if (param.isVisible() && rid != null) {
-				String title = getString(rid);
+			if (param.isVisible()) {
+				String title = rid == null ? "" : getString(rid);
 
 				out.put("type", "Group");
 				out.put("title", title);
 				out.put("parameters", pgInfo.list);
-				out.put("id", rid);
+				out.put("id", rid == null ? "" + param.hashCode() : rid);
 				int numberColumns = paramGroup.getNumberColumns();
 				if (numberColumns > 1) {
 					out.put("col-hint", numberColumns);
 				}
+
+				int indent = paramGroup.getIndent();
+				if (indent > 0) {
+					out.put("indent", indent);
+					boolean fancy = paramGroup.isIndentFancy();
+					if (fancy) {
+						out.put("indent-style", "Fancy");
+					}
+				}
+
 				addIfNotNull(out, "key", param.getConfigKeyName());
 				addIfNotNull(out, "ref-id", ((ParameterImpl) param).getReferenceID());
 
@@ -595,7 +600,7 @@ public class ConfigMethods
 				if (tabFolder != null) {
 					out.put("tabfolder", true);
 				}
-				list.add(out);
+				pgInfo.list.add(out);
 			}
 
 			return out;
@@ -618,7 +623,7 @@ public class ConfigMethods
 				return out;
 			}
 			if ((param instanceof ParameterImpl)
-					&& !((ParameterImpl) param).isForUIType(UIInstance.UIT_CONSOLE)) {
+					&& !param.isForUIType(UIInstance.UIT_CONSOLE)) {
 				return out;
 			}
 
@@ -796,7 +801,7 @@ public class ConfigMethods
 				}
 			}
 
-			list.add(out);
+			pgInfo.list.add(out);
 
 		} finally {
 
