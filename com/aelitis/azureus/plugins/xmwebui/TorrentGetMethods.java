@@ -1155,7 +1155,8 @@ public class TorrentGetMethods
 				}
 				
 				case FIELD_TORRENT_SEQUENTIAL: {
-					value = download.getFlag(Download.FLAG_SEQUENTIAL_DOWNLOAD);
+					value = download.getFlag(Download.FLAG_SEQUENTIAL_DOWNLOAD)
+							&& !download.isComplete();
 					break;
 				}
 				
