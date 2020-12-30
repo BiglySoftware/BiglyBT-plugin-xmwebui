@@ -23,6 +23,7 @@ import com.biglybt.core.category.CategoryManager;
 import com.biglybt.core.config.COConfigurationManager;
 import com.biglybt.core.disk.DiskManager;
 import com.biglybt.core.disk.DiskManagerPiece;
+import com.biglybt.core.disk.impl.resume.RDResumeHandler;
 import com.biglybt.core.download.DownloadManager;
 import com.biglybt.core.download.DownloadManagerState;
 import com.biglybt.core.download.DownloadManagerStats;
@@ -1985,6 +1986,21 @@ public class TorrentGetMethods
 		// have sortedFields param)
 		if (sortedFields != null) {
 			boolean showAllVuze = sortedFields.size() == 0;
+
+			if (canAdd(FIELD_FILES_MUST_EXIST, sortedFields, showAllVuze)) {
+				boolean mustExist;
+				try {
+					if (file.isDeleted() || file.isSkipped()) {
+						mustExist = RDResumeHandler.fileMustExist(
+								PluginCoreUtils.unwrap(download), PluginCoreUtils.unwrap(file));
+					} else {
+						mustExist = true;
+					}
+				} catch (DownloadException e) {
+					mustExist = true;
+				}
+				obj.put(FIELD_FILES_MUST_EXIST, mustExist);
+			}
 
 			if (canAdd(FIELD_FILES_CONTENT_URL, sortedFields, showAllVuze)) {
 				String s = "";
