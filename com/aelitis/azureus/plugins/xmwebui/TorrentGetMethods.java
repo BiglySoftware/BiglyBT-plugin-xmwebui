@@ -784,7 +784,7 @@ public class TorrentGetMethods
 					 * Range is [0..1]
 					 */
 					if (isMetaDownload) {
-						value = metaDLSize > 0 ? (float) metaDLDownloaded / metaDLSize : 0.0f;
+						value = 0.0f;
 						break;
 					}
 
