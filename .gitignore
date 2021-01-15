@@ -6,3 +6,4 @@
 *.zip
 *.biglybt
 *.bak
+/build/

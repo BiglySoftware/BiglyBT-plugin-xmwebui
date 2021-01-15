@@ -9,6 +9,8 @@ or, just rename this file to build.gradle
 I couldn't figure out how to get Android Studio/gradle to use a different sourceset
 */
 
+compileJava.options.encoding = "UTF-8"
+
 sourceSets {
     main {
         java {
@@ -24,6 +26,7 @@ sourceSets {
             srcDirs = [
                     '.'
             ]
+            exclude "plugin.properties"
             exclude 'build/**'
             exclude 'build'
         }
