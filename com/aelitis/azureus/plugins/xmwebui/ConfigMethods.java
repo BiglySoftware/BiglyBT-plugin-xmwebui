@@ -556,6 +556,8 @@ public class ConfigMethods
 			final ParamGroupInfo pgInfo, Stack<ParamGroupInfo> pgInfoStack,
 			int maxUserModeRequested) {
 
+		List<Map<String, Object>> list = pgInfo.list;
+
 		Map<String, Object> out = new HashMap<>();
 		out.put("enabled", param.isEnabled());
 		int minimumRequiredUserMode = param.getMinimumRequiredUserMode();
@@ -600,7 +602,7 @@ public class ConfigMethods
 				if (tabFolder != null) {
 					out.put("tabfolder", true);
 				}
-				pgInfo.list.add(out);
+				list.add(out);
 			}
 
 			return out;
