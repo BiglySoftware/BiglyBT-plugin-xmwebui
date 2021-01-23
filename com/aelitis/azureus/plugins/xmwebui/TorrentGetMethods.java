@@ -1959,26 +1959,16 @@ public class TorrentGetMethods
 			if (simpleTorrent) {
 				obj.put(FIELD_FILES_NAME, realFile.getName());
 			} else {
-				String absolutePath = realFile.getAbsolutePath();
 				String savePath = download.getSavePath();
-				if (absolutePath.startsWith(savePath)) {
+				File absoluteFile = realFile.getAbsoluteFile();
+				String relativePath = FileUtil.getRelativePath(FileUtil.newFile(savePath), absoluteFile);
+				if (relativePath != null) {
 					// TODO: .dnd_az parent..
 					//String dnd_sf = dm.getDownloadState().getAttribute( DownloadManagerState.AT_DND_SUBFOLDER );
 
-					String relativePath = absolutePath.substring(savePath.length());
-					// + 1 to remove the dir separator
-					if (relativePath.startsWith(File.separator)) {
-						relativePath = relativePath.substring(File.separator.length());
-					} else if (absolutePath.startsWith("content://") && relativePath.startsWith("%2F")) {
-						relativePath = relativePath.substring(3);
-						try {
-							relativePath = URLDecoder.decode(relativePath, "UTF-8");
-						} catch (UnsupportedEncodingException e) {
-						}
-					}
 					obj.put(FIELD_FILES_NAME, relativePath);
 				} else {
-					obj.put(FIELD_FILES_NAME, absolutePath);
+					obj.put(FIELD_FILES_NAME, absoluteFile.toString());
 				}
 			}
 		}
