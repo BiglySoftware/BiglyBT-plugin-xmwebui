@@ -22,6 +22,7 @@ import com.biglybt.core.category.Category;
 import com.biglybt.core.category.CategoryManager;
 import com.biglybt.core.config.COConfigurationManager;
 import com.biglybt.core.disk.DiskManager;
+import com.biglybt.core.disk.DiskManagerFileInfo;
 import com.biglybt.core.disk.DiskManagerPiece;
 import com.biglybt.core.disk.impl.resume.RDResumeHandler;
 import com.biglybt.core.download.DownloadManager;
@@ -32,10 +33,10 @@ import com.biglybt.core.peer.*;
 import com.biglybt.core.peer.util.PeerUtils;
 import com.biglybt.core.peermanager.piecepicker.PiecePicker;
 import com.biglybt.core.tag.*;
+import com.biglybt.core.torrent.TOTorrent;
 import com.biglybt.core.tracker.TrackerPeerSource;
 import com.biglybt.core.tracker.client.*;
 import com.biglybt.core.util.*;
-import com.biglybt.pif.disk.DiskManagerFileInfo;
 import com.biglybt.pif.download.*;
 import com.biglybt.pif.download.DownloadStub.DownloadStubFile;
 import com.biglybt.pif.torrent.Torrent;
@@ -53,7 +54,6 @@ import java.io.File;
 import java.io.UnsupportedEncodingException;
 import java.net.URL;
 import java.net.URLConnection;
-import java.net.URLDecoder;
 import java.util.*;
 
 import static com.aelitis.azureus.plugins.xmwebui.StaticUtils.*;
@@ -582,8 +582,8 @@ public class TorrentGetMethods
 
 					String host = (String) request.getHeaders().get("host");
 
-					value = torrentGet_files(plugin, torrent, host, download, download_id,
-							file_fields, args);
+					value = torrentGet_files(plugin, torrent, host, core_download,
+							download_id, file_fields, args);
 
 					// One hash for all files.  This won't work when our file list is a partial
 					//if (value instanceof Collection) {
@@ -595,7 +595,7 @@ public class TorrentGetMethods
 					// RPC v5
 
 					value = isMetaDownload ? 0
-							: torrentGet_fileStats(download, file_fields, args);
+							: torrentGet_fileStats(core_download, file_fields, args);
 
 					break;
 				case FIELD_TORRENT_HASH_STRING:
@@ -810,7 +810,7 @@ public class TorrentGetMethods
 				case FIELD_TORRENT_PRIORITIES:
 
 					value = isMetaDownload ? Collections.emptyList()
-							: torrentGet_priorities(download);
+							: torrentGet_priorities(core_download);
 
 					break;
 				case FIELD_TORRENT_POSITION:
@@ -970,7 +970,7 @@ public class TorrentGetMethods
 					break;
 				case FIELD_TORRENT_WANTED:
 
-					value = torrentGet_wanted(download);
+					value = torrentGet_wanted(core_download);
 
 					break;
 				case "webseeds":
@@ -1730,7 +1730,7 @@ public class TorrentGetMethods
 		return value;
 	}
 
-	private static Object torrentGet_fileStats(Download download,
+	private static Object torrentGet_fileStats(DownloadManager download,
 			List<String> file_fields, Map args) {
 		// | a file's non-constant properties.    |
 		// | array of tr_info.filecount objects,  |
@@ -1741,7 +1741,7 @@ public class TorrentGetMethods
 		// | priority                | number     | tr_info
 		List<Map> stats_list = new ArrayList<>();
 
-		DiskManagerFileInfo[] files = download.getDiskManagerFileInfo();
+		DiskManagerFileInfo[] files = download.getDiskManagerFileInfoSet().getFiles();
 
 		for (DiskManagerFileInfo file : files) {
 			Map<String, Object> map = new TreeMap<>();
@@ -1762,12 +1762,12 @@ public class TorrentGetMethods
 			map.put(FIELD_FILESTATS_BYTES_COMPLETED, file.getDownloaded());
 		}
 		if (canAdd(FIELD_FILESTATS_WANTED, sortedFields, all)) {
-			map.put(FIELD_FILESTATS_WANTED, !file.isSkipped() && !file.isDeleted());
+			map.put(FIELD_FILESTATS_WANTED, !file.isSkipped() && !isDeleted(file));
 		}
 
 		if (canAdd(FIELD_FILESTATS_PRIORITY, sortedFields, all)) {
 			map.put(FIELD_FILESTATS_PRIORITY,
-					convertVuzePriority(file.getNumericPriority()));
+					convertVuzePriority(file.getPriority()));
 		}
 	}
 
@@ -1843,7 +1843,7 @@ public class TorrentGetMethods
 	}
 
 	private static Object torrentGet_files(XMWebUIPlugin plugin,
-			Map<String, Object> mapParent, String host, Download download,
+			Map<String, Object> mapParent, String host, DownloadManager download,
 			long download_id, List<String> file_fields, Map<String, Object> args) {
 		// | array of objects, each containing:   |
 		// +-------------------------+------------+
@@ -1859,7 +1859,7 @@ public class TorrentGetMethods
 		// Skip files that match these hashcodes
 		List listHCs = getMapList(args, PREFIX_FILES_HC + download_id, ',', null);
 
-		DiskManagerFileInfo[] files = download.getDiskManagerFileInfo();
+		DiskManagerFileInfo[] files = download.getDiskManagerFileInfoSet().getFiles();
 
 		int[] file_indexes = getFileIndexes(args, download_id);
 
@@ -1942,7 +1942,7 @@ public class TorrentGetMethods
 
 	private static void torrentGet_files(XMWebUIPlugin plugin,
 			Map<String, Object> obj, List<String> sortedFields, String host,
-			String baseURL, Download download, DiskManagerFileInfo file) {
+			String baseURL, DownloadManager download, DiskManagerFileInfo file) {
 		boolean all = sortedFields == null || sortedFields.size() == 0;
 		File realFile = null;
 		if (canAdd(FIELD_FILESTATS_BYTES_COMPLETED, sortedFields, all)) {
@@ -1952,23 +1952,22 @@ public class TorrentGetMethods
 			obj.put(FIELD_FILES_LENGTH, file.getLength());
 		}
 		if (canAdd(FIELD_FILES_NAME, sortedFields, all)) {
-			Torrent torrent = download.getTorrent();
+			TOTorrent torrent = download.getTorrent();
 			boolean simpleTorrent = torrent != null && torrent.isSimpleTorrent();
 			realFile = file.getFile(true);
 
 			if (simpleTorrent) {
 				obj.put(FIELD_FILES_NAME, realFile.getName());
 			} else {
-				String savePath = download.getSavePath();
-				File absoluteFile = realFile.getAbsoluteFile();
-				String relativePath = FileUtil.getRelativePath(FileUtil.newFile(savePath), absoluteFile);
+				File saveLocation = download.getSaveLocation();
+				String relativePath = FileUtil.getRelativePath(saveLocation, realFile);
 				if (relativePath != null) {
 					// TODO: .dnd_az parent..
 					//String dnd_sf = dm.getDownloadState().getAttribute( DownloadManagerState.AT_DND_SUBFOLDER );
 
 					obj.put(FIELD_FILES_NAME, relativePath);
 				} else {
-					obj.put(FIELD_FILES_NAME, absoluteFile.toString());
+					obj.put(FIELD_FILES_NAME, realFile.getAbsolutePath());
 				}
 			}
 		}
@@ -1979,23 +1978,18 @@ public class TorrentGetMethods
 			boolean showAllVuze = sortedFields.size() == 0;
 
 			if (canAdd(FIELD_FILES_MUST_EXIST, sortedFields, showAllVuze)) {
-				boolean mustExist;
-				try {
-					if (file.isDeleted() || file.isSkipped()) {
-						mustExist = RDResumeHandler.fileMustExist(
-								PluginCoreUtils.unwrap(download), PluginCoreUtils.unwrap(file));
-					} else {
-						mustExist = true;
-					}
-				} catch (DownloadException e) {
-					mustExist = true;
-				}
+				boolean mustExist = (isDeleted(file) || file.isSkipped())
+						? RDResumeHandler.fileMustExist(download, file) : true;
 				obj.put(FIELD_FILES_MUST_EXIST, mustExist);
 			}
 
 			if (canAdd(FIELD_FILES_CONTENT_URL, sortedFields, showAllVuze)) {
 				String s = "";
-				URL f_stream_url = PlayUtils.getMediaServerContentURL(file);
+				URL f_stream_url = null;
+				try {
+					f_stream_url = PlayUtils.getMediaServerContentURL(PluginCoreUtils.wrap(file));
+				} catch (DownloadException ignore) {
+				}
 				if (f_stream_url != null) {
 					s = adjustURL(host, f_stream_url);
 					if (baseURL != null && s.startsWith(baseURL)) {
@@ -2013,13 +2007,7 @@ public class TorrentGetMethods
 			}
 			
 			if (canAdd("eta", sortedFields, showAllVuze)) {
-				long eta = -1;
-				try {
-					com.biglybt.core.disk.DiskManagerFileInfo coreFileInfo = PluginCoreUtils.unwrap(file);
-					eta = coreFileInfo.getETA();
-				} catch (DownloadException e) {
-				}
-				obj.put("eta", eta);
+				obj.put("eta", file.getETA());
 			}
 		}
 
@@ -2404,16 +2392,16 @@ public class TorrentGetMethods
 		return value;
 	}
 
-	private static Object torrentGet_priorities(Download download) {
+	private static Object torrentGet_priorities(DownloadManager download) {
 		// | an array of tr_info.filecount        | tr_info
 		// | numbers. each is the tr_priority_t   |
 		// | mode for the corresponding file.     |
 		List<Long> list = new ArrayList<>();
 
-		DiskManagerFileInfo[] fileInfos = download.getDiskManagerFileInfo();
+		DiskManagerFileInfo[] fileInfos = download.getDiskManagerFileInfoSet().getFiles();
 
 		for (DiskManagerFileInfo fileInfo : fileInfos) {
-			int priority = fileInfo.getNumericPriority();
+			int priority = fileInfo.getPriority();
 			long newPriority = convertVuzePriority(priority);
 			list.add(newPriority);
 		}
@@ -2763,17 +2751,17 @@ public class TorrentGetMethods
 		return trackers;
 	}
 
-	private static Object torrentGet_wanted(Download download) {
+	private static Object torrentGet_wanted(DownloadManager download) {
 		// wanted             
 		// | an array of tr_info.fileCount        | tr_info
 		// | 'booleans' true if the corresponding |
 		// | file is to be downloaded.            |
 		List<Object> list = new ArrayList<>();
 
-		DiskManagerFileInfo[] files = download.getDiskManagerFileInfo();
+		DiskManagerFileInfo[] files = download.getDiskManagerFileInfoSet().getFiles();
 
 		for (DiskManagerFileInfo file : files) {
-			list.add(!file.isSkipped() && !file.isDeleted());
+			list.add(!file.isSkipped() && !isDeleted(file));
 		}
 
 		return list;
@@ -2817,5 +2805,12 @@ public class TorrentGetMethods
 			}
 		}
 		return numWebSeedsConnected;
+	}
+	
+	private static boolean isDeleted(DiskManagerFileInfo file) {
+		int st = file.getStorageType();
+
+		return st == DiskManagerFileInfo.ST_COMPACT
+				|| st == DiskManagerFileInfo.ST_REORDER_COMPACT;
 	}
 }
