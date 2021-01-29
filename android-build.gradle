@@ -1,43 +1,57 @@
-apply plugin: 'java-library'
+plugins {
+    id 'com.android.library'
+}
 
 /*
 To use this in Android Studio, place something like the following in your root settings.gradle
     include ':BiglyBT-plugin-xmwebui'
     project(':BiglyBT-plugin-xmwebui').buildFileName = 'android-build.gradle'
 or, just rename this file to build.gradle
-    
-I couldn't figure out how to get Android Studio/gradle to use a different sourceset
 */
 
-compileJava.options.encoding = "UTF-8"
+android {
+    compileSdkVersion rootProject.ext.compileSdkVersion
 
-sourceSets {
-    main {
-        java {
-            srcDirs = [
-                    '.'
-            ]
-            exclude 'com/aelitis/azureus/plugins/xmwebui/swt/**'
-            exclude 'com/aelitis/azureus/plugins/xmwebui/console/**'
-        }
+    defaultConfig {
+        minSdkVersion 14
+        multiDexEnabled true
+    }
 
-        resources {
-            includes = ['**/*.properties']
-            srcDirs = [
-                    '.'
-            ]
-            exclude "plugin.properties"
-            exclude 'build/**'
-            exclude 'build'
+    lintOptions {
+        abortOnError false
+    }
+
+    compileOptions {
+        encoding = "UTF-8"
+
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+
+
+    sourceSets {
+        main {
+            java {
+                srcDirs = [
+                        '.'
+                ]
+                exclude 'com/aelitis/azureus/plugins/xmwebui/swt/**'
+                exclude 'com/aelitis/azureus/plugins/xmwebui/console/**'
+            }
+
+            resources {
+                includes = ['**/*.properties']
+                srcDirs = [
+                        '.'
+                ]
+                exclude "plugin.properties"
+                exclude 'build/**'
+                exclude 'build'
+            }
         }
     }
 }
 
 dependencies {
     implementation project(path: ':core')
-}
-
-java {
-    sourceCompatibility JavaVersion.VERSION_1_8
-    targetCompatibility JavaVersion.VERSION_1_8
 }
