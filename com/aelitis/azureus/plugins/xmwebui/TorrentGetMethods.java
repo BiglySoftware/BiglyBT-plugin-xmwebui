@@ -52,6 +52,8 @@ import org.gudy.bouncycastle.util.encoders.Base64;
 
 import java.io.File;
 import java.io.UnsupportedEncodingException;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
 import java.net.URL;
 import java.net.URLConnection;
 import java.util.*;
@@ -2076,6 +2078,21 @@ public class TorrentGetMethods
 		Object value = false;
 		int state = download.getState();
 		if (state == Download.ST_SEEDING || state == Download.ST_DOWNLOADING) {
+			// DefaultRankCalculator switched from Class to Interface, so use reflection
+			// to make plugin work on all versions
+			try {
+				Object oCalc = StartStopRulesDefaultPlugin.class.getMethod(
+						"getRankCalculator", Download.class).invoke(null, download);
+				if (oCalc != null) {
+					boolean active = (boolean) oCalc.getClass().getMethod(
+							state == Download.ST_SEEDING ? "getActivelySeeding"
+									: "getActivelyDownloading").invoke(oCalc);
+					value = !active;
+				}
+			} catch (Throwable ignore) {
+			}
+			
+			/* TODO: Use this after 2601
 			DefaultRankCalculator calc = StartStopRulesDefaultPlugin.getRankCalculator(
 					download);
 			if (calc != null) {
@@ -2083,6 +2100,7 @@ public class TorrentGetMethods
 						|| (state == Download.ST_DOWNLOADING
 								&& !calc.getActivelyDownloading());
 			}
+			*/
 		}
 		return value;
 	}
