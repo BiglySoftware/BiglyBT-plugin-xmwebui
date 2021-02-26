@@ -42,7 +42,6 @@ import com.biglybt.pif.download.DownloadStub.DownloadStubFile;
 import com.biglybt.pif.torrent.Torrent;
 import com.biglybt.pif.tracker.web.TrackerWebPageRequest;
 import com.biglybt.pifimpl.local.PluginCoreUtils;
-import com.biglybt.plugin.startstoprules.defaultplugin.DefaultRankCalculator;
 import com.biglybt.plugin.startstoprules.defaultplugin.StartStopRulesDefaultPlugin;
 import com.biglybt.util.JSONUtils;
 import com.biglybt.util.MapUtils;
@@ -52,8 +51,6 @@ import org.gudy.bouncycastle.util.encoders.Base64;
 
 import java.io.File;
 import java.io.UnsupportedEncodingException;
-import java.lang.reflect.InvocationTargetException;
-import java.lang.reflect.Method;
 import java.net.URL;
 import java.net.URLConnection;
 import java.util.*;
