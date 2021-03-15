@@ -173,6 +173,8 @@ XMWebUIPlugin
     protected BooleanParameter trace_param;
     
     private BooleanParameter hide_ln_param;
+    private BooleanParameter hide_archived_param;
+    
     private BooleanParameter force_net_param;
     private StringListParameter uncheck_files_param;
     private DirectoryParameter webdir_param;
@@ -336,6 +338,8 @@ XMWebUIPlugin
 				}, "dnd");
 
 		hide_ln_param = config.addBooleanParameter2( "xmwebui.hidelownoise", "xmwebui.hidelownoise", true );
+		
+		hide_archived_param = config.addBooleanParameter2( "xmwebui.hidearchived", "xmwebui.hidearchived", false );
 
 		force_net_param = config.addBooleanParameter2( "xmwebui.forcenets", "xmwebui.forcenets", false );
 
@@ -3002,27 +3006,32 @@ XMWebUIPlugin
 		
 		boolean hide_ln = hide_ln_param.getValue();
 		
+		boolean hide_archived = hide_archived_param.getValue();
+		
 		for( DownloadStub download_stub: all_downloads ){
 			
 			if ( download_stub.isStub()){
 				
-				if ( ids == null ){
+				if ( !hide_archived ){
 					
-					downloads.add( download_stub );
-					
-				}else{
-					
-					long	id = getID( download_stub, true );
-					
-					if ( selected_ids.contains( id )){
+					if ( ids == null ){
 						
 						downloads.add( download_stub );
 						
 					}else{
 						
-						if ( selected_hashes.contains( ByteFormatter.encodeString( download_stub.getTorrentHash()))){
-								
+						long	id = getID( download_stub, true );
+						
+						if ( selected_ids.contains( id )){
+							
 							downloads.add( download_stub );
+							
+						}else{
+							
+							if ( selected_hashes.contains( ByteFormatter.encodeString( download_stub.getTorrentHash()))){
+									
+								downloads.add( download_stub );
+							}
 						}
 					}
 				}
