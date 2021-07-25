@@ -294,6 +294,10 @@ Transmission.prototype = {
             preventSelect: true,
             taphold: true,
             autoFocus: true,
+            position: function (event) {
+                // Use originalEvent positioning for better taphold support on touch devices
+                return { of: event.originalEvent || event }
+            },
             show: {
                 effect: "none"
             },
