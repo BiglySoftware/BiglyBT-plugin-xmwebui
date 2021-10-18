@@ -1282,7 +1282,7 @@ public class TorrentMethods
 				StringBuilder mdNameRegex = new StringBuilder();
 				for (String s : split) {
 					if (s.length() > 0) {
-						mdNameRegex.append("\\Q").append(s).append("\\E");
+						mdNameRegex.append(Pattern.quote(s));
 					} else {
 						mdNameRegex.append("(.*)");
 					}
