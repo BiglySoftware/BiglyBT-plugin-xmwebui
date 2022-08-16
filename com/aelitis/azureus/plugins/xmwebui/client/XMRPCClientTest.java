@@ -116,7 +116,7 @@ XMRPCClientTest
 	
 				File f = new File( "C:\\temp\\b.torrent" );
 				
-				String url = f.toURL().toExternalForm();
+				String url = f.toURI().toURL().toExternalForm();
 				
 				System.out.println( "Adding " + url );
 				
