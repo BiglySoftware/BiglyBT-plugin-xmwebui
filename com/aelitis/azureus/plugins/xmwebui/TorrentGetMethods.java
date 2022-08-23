@@ -2575,10 +2575,10 @@ public class TorrentGetMethods
 			Map<String, Object> map = new HashMap<>(64);
 
 			/* how many downloads this tracker knows of (-1 means it does not know) */
-			map.put("downloadCount", -1); // TODO
+			map.put("downloadCount", tps.getCompletedCount()); 
 
 			/* whether or not we've ever sent this tracker an announcement */
-			map.put("hasAnnounced", tps.getPeers() >= 0); // TODO
+			map.put("hasAnnounced", tps.getLastUpdate() >= 0);
 
 			/* whether or not we've ever scraped to this tracker */
 			map.put("hasScraped", false); // todo: bool);
@@ -2586,7 +2586,7 @@ public class TorrentGetMethods
 			String name = "";
 			try {
 				name = tps.getName();
-			} catch (Exception e) {
+			} catch (Throwable e) {
 				// NPE at com.aelitis.azureus.pif.extseed.ExternalSeedPlugin$5.getName(ExternalSeedPlugin.java:561
 			}
 
@@ -2667,7 +2667,7 @@ public class TorrentGetMethods
 
 			/* when the last announce was completed.
 			   if "hasAnnounced" is false, this field is undefined */
-			map.put("lastAnnounceTime", 0); // TODO: time_t);
+			map.put("lastAnnounceTime", tps.getLastUpdate()); // TODO: time_t);
 
 			/* human-readable string with the result of the last scrape.
 			 * if "hasScraped" is false, this field is undefined */
@@ -2695,7 +2695,8 @@ public class TorrentGetMethods
 
 			/* when the next periodic announce message will be sent out.
 			   if announceState isn't TR_TRACKER_WAITING, this field is undefined */
-			map.put("nextAnnounceTime", 0); // TODO: time_t);
+			int secsToUpdate = tps.getSecondsToUpdate();
+			map.put("nextAnnounceTime", secsToUpdate<0?0:(SystemTime.getCurrentTime()/1000 +secsToUpdate )); // TODO: time_t);
 
 			/* when the next periodic scrape message will be sent out.
 			   if scrapeState isn't TR_TRACKER_WAITING, this field is undefined */

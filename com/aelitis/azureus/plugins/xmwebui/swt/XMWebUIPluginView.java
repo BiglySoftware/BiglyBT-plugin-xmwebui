@@ -201,7 +201,6 @@ XMWebUIPluginView
 				
 				break;
 			}
-			case UISWTViewEvent.TYPE_CLOSE:
 			case UISWTViewEvent.TYPE_DESTROY:{
 				
 				try{
