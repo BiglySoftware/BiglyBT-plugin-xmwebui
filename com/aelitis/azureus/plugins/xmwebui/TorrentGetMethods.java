@@ -2226,6 +2226,9 @@ public class TorrentGetMethods
 				//TODO
 				StringBuilder flagStr = new StringBuilder();
 
+				if ( peer.isOptimisticUnchoke()){
+					flagStr.append('O');
+				}
 				if (isDownloadingFrom) {
 					flagStr.append('D');
 				} else if (peer.isDownloadPossible()) {
@@ -2233,6 +2236,8 @@ public class TorrentGetMethods
 				}
 				if (isUploadingTo) {
 					flagStr.append("U");
+				}else if (!peer.isChokedByMe() && peer.isInterested()){
+					flagStr.append("u");
 				}
 				if (!peer.isChokingMe() && !peer.isInteresting()) {
 					flagStr.append("K");
@@ -2251,7 +2256,7 @@ public class TorrentGetMethods
 					case PEPeerSource.PS_OTHER_PEER:
 						flagStr.append('X');
 						break;
-					case PEPeerSource.PS_BT_TRACKER: // XXX PS_INCOMING
+					case PEPeerSource.PS_INCOMING:
 						flagStr.append('I');
 						break;
 				}
@@ -2346,6 +2351,9 @@ public class TorrentGetMethods
 						break;
 					case PEPeerSource.PS_OTHER_PEER:
 						peerSource = "fromPex";
+						break;
+					case PEPeerSource.PS_HOLE_PUNCH:
+						peerSource = "fromLtep";		// dunno what fromLtep is supposed to be but meh
 						break;
 					case PEPeerSource.PS_PLUGIN:
 						// TODO: better cat?
