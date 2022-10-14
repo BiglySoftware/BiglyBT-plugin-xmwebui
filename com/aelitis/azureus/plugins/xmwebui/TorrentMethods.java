@@ -384,16 +384,19 @@ public class TorrentMethods
 					add_listener);
 		}
 
-		Map<String, Object> torrent_details = new HashMap<>();
-
-		torrent_details.put("id", plugin.getID(download, true));
-		String name = getName(download);
-		torrent_details.put("name", xmlEscape ? escapeXML(name) : name);
-		torrent_details.put(FIELD_TORRENT_HASH_STRING,
-				ByteFormatter.encodeString(download.getTorrentHash()));
-
-		result.put(duplicate ? "torrent-duplicate" : "torrent-added",
-				torrent_details);
+		if ( download != null ){
+			
+			Map<String, Object> torrent_details = new HashMap<>();
+	
+			torrent_details.put("id", plugin.getID(download, true));
+			String name = getName(download);
+			torrent_details.put("name", xmlEscape ? escapeXML(name) : name);
+			torrent_details.put(FIELD_TORRENT_HASH_STRING,
+					ByteFormatter.encodeString(download.getTorrentHash()));
+	
+			result.put(duplicate ? "torrent-duplicate" : "torrent-added",
+					torrent_details);
+		}
 	}
 	
 	/**

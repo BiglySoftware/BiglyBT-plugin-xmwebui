@@ -41,6 +41,7 @@ import com.biglybt.core.security.CryptoManager;
 import com.biglybt.core.subs.*;
 import com.biglybt.core.torrent.PlatformTorrentUtils;
 import com.biglybt.core.torrent.TOTorrent;
+import com.biglybt.core.torrent.impl.TorrentOpenOptions;
 import com.biglybt.core.tracker.TrackerPeerSource;
 import com.biglybt.core.util.*;
 import com.biglybt.core.vuzefile.VuzeFile;
@@ -68,6 +69,8 @@ import com.biglybt.pif.utils.resourcedownloader.ResourceDownloader;
 import com.biglybt.pif.utils.resourcedownloader.ResourceDownloaderAdapter;
 import com.biglybt.pifimpl.local.PluginCoreUtils;
 import com.biglybt.pifimpl.local.utils.resourcedownloader.ResourceDownloaderFactoryImpl;
+import com.biglybt.ui.UIFunctions;
+import com.biglybt.ui.UIFunctionsManager;
 import com.biglybt.ui.webplugin.WebPlugin;
 import com.biglybt.util.JSONUtils;
 import com.biglybt.util.MapUtils;
@@ -180,7 +183,8 @@ XMWebUIPlugin
     private DirectoryParameter webdir_param;
     private HyperlinkParameter openui_param;
     private HyperlinkParameter launchAltWebUI_param;
-
+    private BooleanParameter use_torrent_options_dialog;
+    
     private TorrentAttribute	t_id;
     
     private final Map<Long,RecentlyRemovedData>	recently_removed 	= new HashMap<>();
@@ -342,6 +346,8 @@ XMWebUIPlugin
 		hide_archived_param = config.addBooleanParameter2( "xmwebui.hidearchived", "xmwebui.hidearchived", false );
 
 		force_net_param = config.addBooleanParameter2( "xmwebui.forcenets", "xmwebui.forcenets", false );
+		
+		use_torrent_options_dialog = config.addBooleanParameter2( "xmwebui.use_to_dialog", "xmwebui.use_to_dialog", false );
 
 		trace_param = config.addBooleanParameter2( "xmwebui.trace", "xmwebui.trace", false );
 		
@@ -1190,7 +1196,7 @@ XMWebUIPlugin
 							}
 							
 							try{
-								Download download = addTorrent( torrent, null, add_stopped, null );
+								addTorrent( torrent, null, add_stopped, null );
 								
 								response.setContentType( "text/xml; charset=UTF-8" );
 								
@@ -1400,6 +1406,62 @@ XMWebUIPlugin
 			
 			if ( download == null ){
 
+				if ( use_torrent_options_dialog.getValue()){
+					
+					try{
+						UIFunctions uif = UIFunctionsManager.getUIFunctions();
+						
+						TorrentOpenOptions torrentOptions = new TorrentOpenOptions( null );
+						
+						TOTorrent to_torrent = PluginCoreUtils.unwrap( torrent );
+						
+						String torrent_file = TorrentUtils.getTorrentFileName( to_torrent, false );
+						
+						if ( torrent_file == null ){
+							
+							String	torrent_name = FileUtil.convertOSSpecificChars( TorrentUtils.getLocalisedName( to_torrent ) + ".torrent", false );
+
+							File f = FileUtil.newFile( AETemporaryFileHandler.getTempDirectory(), torrent_name );
+							
+							if ( f.exists()){
+								
+								f = AETemporaryFileHandler.createTempFile();
+							}
+							
+							torrent_file = f.getAbsolutePath();
+							
+							TorrentUtils.writeToFile( to_torrent, f, false );
+						}
+						
+						torrentOptions.setDeleteFileOnCancel( true );
+						torrentOptions.setTorrentFile( torrent_file );
+						torrentOptions.setTorrent( to_torrent );
+						
+						if ( add_stopped ){
+							
+							torrentOptions.setStartMode( TorrentOpenOptions.STARTMODE_STOPPED );
+						}
+						
+						if ( force_net_param.getValue()){
+							
+							String[] nets = AENetworkClassifier.getDefaultNetworks();
+							
+							for ( String net: nets ){
+							
+								torrentOptions.setNetworkEnabled( net, true );
+							}
+						}
+						
+						uif.addTorrentWithOptions( false, torrentOptions );
+						
+						return( null );
+						
+					}catch( Throwable e ){
+						
+						Debug.out( e );
+					}
+				}
+				
 				DownloadWillBeAddedListener my_listener = 
 					new DownloadWillBeAddedListener()
 					{
@@ -1432,7 +1494,6 @@ XMWebUIPlugin
 					
 					download = dm.addDownload( torrent, null, download_dir );
 				}
-			
 			
 					// particularly necessary for the android client as untidy closedown is common
 			
