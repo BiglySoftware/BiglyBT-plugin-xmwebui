@@ -1082,123 +1082,130 @@ public class TorrentMethods
 					}
 				}
 
+				boolean needsResume = false;
+
 				DiskManagerFileInfo[] files = download.getDiskManagerFileInfo();
+				try {
+					boolean needPaused = (files_delete != null && files_delete.size() > 0)
+							|| (files_unwanted != null && files_unwanted.size() > 0
+									&& plugin.getUncheckDeletes());
+					needsResume = needPaused && !download.isPaused();
+					if (needsResume) {
+						download.pause();
+					}
 
-				if (files_unwanted != null) {
-					boolean uncheckDeletes = plugin.getUncheckDeletes();
+					if (files_unwanted != null) {
+						boolean uncheckDeletes = plugin.getUncheckDeletes();
 
-					for (Object o : files_unwanted) {
+						for (Object o : files_unwanted) {
 
-						int index = ((Long) o).intValue();
+							int index = ((Long) o).intValue();
 
-						if (index >= 0 && index <= files.length) {
+							if (index >= 0 && index <= files.length) {
 
-							if (uncheckDeletes) {
-								files[index].setDeleted(true);
-							} else {
+								if (uncheckDeletes) {
+									files[index].setDeleted(true);
+								} else {
+									files[index].setSkipped(true);
+								}
+							}
+						}
+					}
+
+					if (files_dnd != null) {
+
+						for (Object o : files_dnd) {
+
+							int index = ((Long) o).intValue();
+
+							if (index >= 0 && index <= files.length) {
+
 								files[index].setSkipped(true);
 							}
 						}
 					}
-				}
 
-				if (files_dnd != null) {
+					if (files_delete != null) {
+						for (Object o : files_delete) {
 
-					for (Object o : files_dnd) {
+							int index = ((Long) o).intValue();
 
-						int index = ((Long) o).intValue();
+							if (index >= 0 && index <= files.length) {
 
-						if (index >= 0 && index <= files.length) {
-
-							files[index].setSkipped(true);
+								files[index].setDeleted(true);
+							}
 						}
 					}
-				}
 
-				if (files_delete != null) {
+					if (files_wanted != null) {
 
-					for (Object o : files_delete) {
+						for (Object o : files_wanted) {
 
-						int index = ((Long) o).intValue();
+							int index = ((Long) o).intValue();
 
-						if (index >= 0 && index <= files.length) {
+							if (index >= 0 && index <= files.length) {
 
-							files[index].setDeleted(true);
+								files[index].setSkipped(false);
+							}
 						}
 					}
-				}
 
-				if (files_wanted != null) {
+					if (priority_high != null) {
 
-					for (Object o : files_wanted) {
+						for (Object o : priority_high) {
 
-						int index = ((Long) o).intValue();
+							int index = ((Long) o).intValue();
 
-						if (index >= 0 && index <= files.length) {
+							if (index >= 0 && index <= files.length) {
 
-							files[index].setSkipped(false);
+								files[index].setNumericPriority(
+										DiskManagerFileInfo.PRIORITY_HIGH);
+							}
 						}
 					}
-				}
 
-				if (priority_high != null) {
+					if (priority_normal != null) {
 
-					for (Object o : priority_high) {
+						for (Object o : priority_normal) {
 
-						int index = ((Long) o).intValue();
+							int index = ((Long) o).intValue();
 
-						if (index >= 0 && index <= files.length) {
+							if (index >= 0 && index <= files.length) {
 
-							files[index].setNumericPriority(
-									DiskManagerFileInfo.PRIORITY_HIGH);
+								files[index].setNumericPriority(
+										DiskManagerFileInfo.PRIORITY_NORMAL);
+							}
 						}
 					}
-				}
 
-				if (priority_normal != null) {
+					if (priority_low != null) {
 
-					for (Object o : priority_normal) {
+						for (Object o : priority_low) {
 
-						int index = ((Long) o).intValue();
+							int index = ((Long) o).intValue();
 
-						if (index >= 0 && index <= files.length) {
+							if (index >= 0 && index <= files.length) {
 
-							files[index].setNumericPriority(
-									DiskManagerFileInfo.PRIORITY_NORMAL);
+								files[index].setNumericPriority(
+										DiskManagerFileInfo.PRIORITY_LOW);
+							}
 						}
 					}
-				}
 
-				if (priority_low != null) {
+					if (uploaded_ever != -1 || downloaded_ever != -1) {
 
-					for (Object o : priority_low) {
+						// new method in 4511 B31
 
-						int index = ((Long) o).intValue();
+						try {
+							download.getStats().resetUploadedDownloaded(uploaded_ever,
+									downloaded_ever);
 
-						if (index >= 0 && index <= files.length) {
-
-							files[index].setNumericPriority(DiskManagerFileInfo.PRIORITY_LOW);
+						} catch (Throwable e) {
 						}
 					}
-				}
 
-				if (uploaded_ever != -1 || downloaded_ever != -1) {
+					if (file_infos != null) {
 
-					// new method in 4511 B31
-
-					try {
-						download.getStats().resetUploadedDownloaded(uploaded_ever,
-								downloaded_ever);
-
-					} catch (Throwable e) {
-					}
-				}
-
-				if (file_infos != null) {
-
-					boolean paused_it = false;
-
-					try {
 						for (Object fileInfo : file_infos) {
 
 							Map file_info = (Map) fileInfo;
@@ -1236,10 +1243,11 @@ public class TorrentMethods
 
 								download.pause();
 
-								paused_it = true;
+								needsResume = true;
 							}
 
-							File new_file = FileUtil.newFile(existing.getParentFile(), new_name);
+							File new_file = FileUtil.newFile(existing.getParentFile(),
+									new_name);
 
 							if (new_file.exists()) {
 
@@ -1247,21 +1255,21 @@ public class TorrentMethods
 										"new file '" + new_file + "' already exists"));
 							}
 
-							file.setLink(new_file);
-						}
-					} finally {
-
-						if (paused_it) {
-
-							download.resume();
+							file.setLink(new_file, false);
 						}
 					}
-				}
 
-				if (sequential != null) {
-					download.setFlag(Download.FLAG_SEQUENTIAL_DOWNLOAD, sequential);
-				}
+					if (sequential != null) {
+						download.setFlag(Download.FLAG_SEQUENTIAL_DOWNLOAD, sequential);
+					}
 
+				} finally {
+
+					if (needsResume) {
+
+						download.resume();
+					}
+				}
 			} catch (Throwable e) {
 
 				Debug.out(e);
