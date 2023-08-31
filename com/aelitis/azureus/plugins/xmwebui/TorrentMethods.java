@@ -1089,7 +1089,8 @@ public class TorrentMethods
 					boolean needPaused = (files_delete != null && files_delete.size() > 0)
 							|| (files_unwanted != null && files_unwanted.size() > 0
 									&& plugin.getUncheckDeletes());
-					needsResume = needPaused && !download.isPaused();
+					needsResume = needPaused && !download.isPaused()
+							&& download.getState() != Download.ST_STOPPED;
 					if (needsResume) {
 						download.pause();
 					}
@@ -1239,7 +1240,7 @@ public class TorrentMethods
 								continue;
 							}
 
-							if (!download.isPaused()) {
+							if (!download.isPaused() && download.getState() != Download.ST_STOPPED) {
 
 								download.pause();
 
