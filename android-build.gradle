@@ -10,7 +10,8 @@ or, just rename this file to build.gradle
 */
 
 android {
-    compileSdkVersion rootProject.ext.compileSdkVersion
+    namespace 'com.aelitis.azureus.plugins.xmwebui'
+    compileSdk rootProject.ext.compileSdkVersion
 
     defaultConfig {
         minSdkVersion 14
