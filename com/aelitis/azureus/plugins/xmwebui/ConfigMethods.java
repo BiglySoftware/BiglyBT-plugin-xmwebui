@@ -568,19 +568,23 @@ public class ConfigMethods
 		if ((param instanceof ParameterGroupImpl)
 				&& param.getMinimumRequiredUserMode() <= maxUserModeRequested) {
 			ParameterGroupImpl paramGroup = (ParameterGroupImpl) param;
-			String rid = paramGroup.getGroupTitleKey();
+			String titleKey = paramGroup.getGroupTitleKey();
+			String rid = paramGroup.getId();
+			if (rid == null) {
+				rid = titleKey == null ? "" + param.hashCode() : titleKey;
+			}
 
 			pgInfoStack.push(pgInfo.copy());
 
 			pgInfo.reset(paramGroup);
 
 			if (param.isVisible()) {
-				String title = rid == null ? "" : getString(rid);
+				String title = titleKey == null ? "" : getString(titleKey);
 
 				out.put("type", "Group");
 				out.put("title", title);
 				out.put("parameters", pgInfo.list);
-				out.put("id", rid == null ? "" + param.hashCode() : rid);
+				out.put("id", rid);
 				int numberColumns = paramGroup.getNumberColumns();
 				if (numberColumns > 1) {
 					out.put("col-hint", numberColumns);
