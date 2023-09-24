@@ -802,8 +802,8 @@ public class TorrentMethods
 
 			Download download = download_stub.destubbify();
 
+			Torrent torrent = download.getTorrent();
 			if (moveData) {
-				Torrent torrent = download.getTorrent();
 				if (torrent == null || torrent.isSimpleTorrent()
 						|| fSavePath.getParentFile() == null) {
 					download.moveDataFiles(fSavePath);
@@ -812,41 +812,40 @@ public class TorrentMethods
 							fSavePath.getName());
 				}
 			} else {
+				if (torrent == null) {
+					continue;
+				}
 				com.biglybt.core.download.DownloadManager dm = PluginCoreUtils.unwrap(
 						download);
 
-				// This is copied from TorrentUtils.changeDirSelectedTorrent
-
 				int state = dm.getState();
-				if (state == com.biglybt.core.download.DownloadManager.STATE_STOPPED) {
-					if (!dm.filesExist(true)) {
-						state = com.biglybt.core.download.DownloadManager.STATE_ERROR;
+				boolean needsResume = state != com.biglybt.core.download.DownloadManager.STATE_STOPPED
+						&& state != com.biglybt.core.download.DownloadManager.STATE_ERROR;
+
+				if (needsResume) {
+					needsResume = dm.pause(true);
+				}
+				boolean locationIncludesName = !torrent.isSimpleTorrent();
+
+				dm.setTorrentSaveDir(fSavePath, locationIncludesName);
+
+				boolean found = dm.filesExist(true);
+				if (!found && dm.getTorrent() != null
+						&& !dm.getTorrent().isSimpleTorrent()) {
+					File parentPath = fSavePath.getParentFile();
+					if (parentPath != null) {
+						dm.setTorrentSaveDir(parentPath, locationIncludesName);
+						found = dm.filesExist(true);
+						if (!found) {
+							dm.setTorrentSaveDir(fSavePath, locationIncludesName);
+						}
 					}
 				}
 
-				if (state == com.biglybt.core.download.DownloadManager.STATE_ERROR) {
-
-					dm.setTorrentSaveDir(FileUtil.newFile(sSavePath), false);
-
-					boolean found = dm.filesExist(true);
-					if (!found && dm.getTorrent() != null
-							&& !dm.getTorrent().isSimpleTorrent()) {
-						String parentPath = fSavePath.getParent();
-						if (parentPath != null) {
-							dm.setTorrentSaveDir(FileUtil.newFile(parentPath), false);
-							found = dm.filesExist(true);
-							if (!found) {
-								dm.setTorrentSaveDir(FileUtil.newFile(sSavePath), false);
-							}
-						}
-					}
-
-					if (found) {
-						dm.stopIt(com.biglybt.core.download.DownloadManager.STATE_STOPPED,
-								false, false);
-
-						dm.setStateQueued();
-					}
+				if (needsResume) {
+					download.resume();
+				} else {
+					dm.forceRecheck();
 				}
 			}
 		}
