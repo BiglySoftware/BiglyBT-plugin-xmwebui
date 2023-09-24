@@ -591,9 +591,10 @@ public class TorrentMethods
 			try {
 				Download download = download_stub.destubbify();
 
-				int state = download.getState();
+				com.biglybt.core.download.DownloadManager core_download = PluginCoreUtils.unwrap(
+						download);
 
-				if (state != Download.ST_STOPPED) {
+				if (!core_download.canForceRecheck()) {
 
 					download.stop();
 				}
