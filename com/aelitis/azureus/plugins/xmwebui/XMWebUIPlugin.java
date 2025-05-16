@@ -71,6 +71,7 @@ import com.biglybt.pifimpl.local.PluginCoreUtils;
 import com.biglybt.pifimpl.local.utils.resourcedownloader.ResourceDownloaderFactoryImpl;
 import com.biglybt.ui.UIFunctions;
 import com.biglybt.ui.UIFunctionsManager;
+import com.biglybt.ui.UIFunctionsUserPrompter;
 import com.biglybt.ui.webplugin.WebPlugin;
 import com.biglybt.util.JSONUtils;
 import com.biglybt.util.MapUtils;
@@ -408,6 +409,32 @@ XMWebUIPlugin
 			setViewMode();
 		}
 
+		boolean has_pw = pluginconfig.getPluginBooleanParameter("Password Enable", CONFIG_PASSWORD_ENABLE_DEFAULT );
+		
+		if ( !has_pw ){
+			
+			UIFunctions uif = UIFunctionsManager.getUIFunctions();
+			
+			if ( uif != null ){
+				
+				UIFunctionsUserPrompter prompt = 
+					uif.getUserPrompter(
+						MessageText.getString("AlertMessageBox.warning"), 
+						MessageText.getString( "xmwebui.warning.no.password" ),
+						new String[]{ MessageText.getString( "Button.ok" )}, 
+						0 );
+
+				if ( prompt != null ){
+					
+					prompt.setIconResource(UIFunctionsUserPrompter.ICON_WARNING);
+					
+					prompt.setRemember("remember:xmwebui:no:password:warning", false, MessageText.getString("MessageBoxWindow.nomoreprompting"));	
+					
+					prompt.open(null);
+				}
+			}
+		}
+		
 		com.biglybt.pif.download.DownloadManager dm = plugin_interface.getDownloadManager();
 		
 		dm.addDownloadWillBeAddedListener( this );
@@ -1398,6 +1425,11 @@ XMWebUIPlugin
 	
 		throws DownloadException
 	{
+		if ( download_dir != null && !download_dir.exists()){
+			
+			download_dir.mkdirs();
+		}
+		
 		synchronized( add_torrent_lock ){
 
 			com.biglybt.pif.download.DownloadManager dm = plugin_interface.getDownloadManager();			
@@ -1436,6 +1468,11 @@ XMWebUIPlugin
 						torrentOptions.setDeleteFileOnCancel( true );
 						torrentOptions.setTorrentFile( torrent_file );
 						torrentOptions.setTorrent( to_torrent );
+						
+						if ( download_dir != null ){
+							
+							torrentOptions.setParentDir( download_dir.getAbsolutePath());
+						}
 						
 						if ( add_stopped ){
 							
@@ -2114,7 +2151,7 @@ XMWebUIPlugin
 
 		if (value instanceof String) {
 
-			if (((String) value).toLowerCase(Locale.US).endsWith(".b32.i2p")) {
+			if ( AENetworkClassifier.categoriseAddress((String)value) != AENetworkClassifier.AT_PUBLIC ){ 
 
 				return (true);
 			}
