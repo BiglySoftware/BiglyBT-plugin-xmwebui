@@ -38,6 +38,7 @@ import com.biglybt.core.tracker.TrackerPeerSource;
 import com.biglybt.core.tracker.client.*;
 import com.biglybt.core.util.*;
 import com.biglybt.pif.download.*;
+import com.biglybt.pif.download.DownloadStub.DownloadStubEx;
 import com.biglybt.pif.download.DownloadStub.DownloadStubFile;
 import com.biglybt.pif.torrent.Torrent;
 import com.biglybt.pif.tracker.web.TrackerWebPageRequest;
@@ -145,8 +146,10 @@ public class TorrentGetMethods
 
 		for (DownloadStub download_stub : downloads) {
 			if (download_stub.isStub()) {
+				
 				method_Torrent_Get_Stub(plugin, request, args, fields, torrent_info,
 						download_stub, file_fields, xmlEscape, isTableFormat);
+				
 			} else {
 				method_Torrent_Get_NonStub(plugin, request, args, fields, torrent_info,
 						(Download) download_stub, file_fields, xmlEscape);
@@ -221,7 +224,7 @@ public class TorrentGetMethods
 					torrents.add(new ArrayList<>(mapTorrent.keySet()));
 					first = false;
 				}
-				torrents.add(values);
+				torrents.add(new ArrayList<>(values));
 			}
 		} else {
 			List<Map> torrents = new ArrayList<>();
@@ -292,7 +295,7 @@ public class TorrentGetMethods
 		}
 
 
-		Map<String, Object> torrent = new HashMap<>(fields.size() + 8);
+		Map<String, Object> torrent = new LinkedHashMap<>(fields.size() + 8);
 
 		torrent_info.put(download_id, torrent);
 
@@ -1210,6 +1213,9 @@ public class TorrentGetMethods
 		long error = TR_STAT_OK;
 		String error_str = "";
 		
+		
+		DownloadStubEx	stub_ex = download_stub instanceof DownloadStubEx?(DownloadStubEx)download_stub:null;
+		
 		if (isMagnet && hasAnyField(fields, FIELD_TORRENT_ERROR,
 				FIELD_TORRENT_ERROR_STRING, FIELD_TORRENT_TAG_UIDS)) {
 
@@ -1423,6 +1429,9 @@ public class TorrentGetMethods
 				case FIELD_TORRENT_RATE_DOWNLOAD:
 				case FIELD_TORRENT_UPLOADED_EVER:
 				case "webseedsSendingToUs":
+				case "uploadLimit":
+				case "downloadLimit":
+				case "doneDate":
 					value = 0;
 
 					break;
@@ -1448,6 +1457,8 @@ public class TorrentGetMethods
 
 				case "isStalled":
 				case "isPrivate":
+				case "uploadLimited":
+				case "downloadLimited":
 					value = false;
 					break;
 
@@ -1462,18 +1473,22 @@ public class TorrentGetMethods
 					break;
 
 				case FIELD_TORRENT_PERCENT_DONE:
-					value = isMagnet ? 0.0f : 100.0f;
+					value = isMagnet ? 0.0f : 100.0f/100;
 					break;
 
 				case FIELD_TORRENT_LEFT_UNTIL_DONE:
 					// leftUntilDone is used to mark downloads as incomplete
 					value = isMagnet ? download_stub.getTorrentSize() : 0;
 					break;
-
+				case FIELD_TORRENT_BANDWITH_PRIORITY:
+					value = TR_PRI_NORMAL;
+					break;
 				case "pieceCount":
 					value = 1;
 					break;
-
+				case "peer-limit":
+					value = -1;
+					break;
 				case "pieceSize": {
 					// recheckProgress             | double                      | tr_stat
 					long size = download_stub.getTorrentSize();
@@ -1481,7 +1496,14 @@ public class TorrentGetMethods
 
 					break;
 				}
+				case FIELD_TORRENT_HONORS_SESSION_LIMITS:
+					value = false;
 
+					break;
+				case "magnetLink":
+
+					value = "";
+					break;
 				case "recheckProgress":
 					// recheckProgress             | double                      | tr_stat
 					value = 0.0f;
@@ -1519,13 +1541,16 @@ public class TorrentGetMethods
 					break;
 
 				case FIELD_TORRENT_STATUS:
+					int core_value;
 					if (!isMagnet) {
 						value = 0;
-						break;
+						core_value = DownloadManager.STATE_STOPPED;
+					}else{
+						MagnetDownload md = (MagnetDownload) download_stub;
+						value = md.getError() == null ? 4 : 0;
+						core_value = DownloadManager.STATE_DOWNLOADING;
 					}
-					MagnetDownload md = (MagnetDownload) download_stub;
-					value = md.getError() == null ? 4 : 0;
-
+					torrent.put(FIELD_TORRENT_STATUS + ".biglybt", core_value );
 					break;
 
 				case "trackers":
@@ -1548,11 +1573,16 @@ public class TorrentGetMethods
 					break;
 
 				case FIELD_TORRENT_DATE_ADDED:
-					// RPC v0
-					// addedDate                   | number                      | tr_stat
-					// When the torrent was first added.
-					value = isMagnet
-							? ((MagnetDownload) download_stub).getCreateTime() / 1000 : 0;
+					if ( stub_ex != null ){
+						
+						value = stub_ex.getCreationDate()/1000;
+					}else{
+						// RPC v0
+						// addedDate                   | number                      | tr_stat
+						// When the torrent was first added.
+						value = isMagnet
+								? ((MagnetDownload) download_stub).getCreateTime() / 1000 : 0;
+					}
 					break;
 
 				case FIELD_TORRENT_COMMENT:
@@ -1561,6 +1591,12 @@ public class TorrentGetMethods
 					value = isMagnet ? "Metadata Download"
 							: "Download Archived";
 					break;
+				case "webseeds":
+				case "labels":
+					value = new ArrayList<>();
+					break;
+				default:
+					System.out.println( "Missing field: " + field );
 
 			}
 
