@@ -1,5 +1,11 @@
 package com.aelitis.azureus.plugins.xmwebui;
 
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+
 /**
  * Variables converted from https://github.com/transmission/transmission/blob/master/libtransmission/transmission.h
  * Comments also from .h file
@@ -718,4 +724,114 @@ public class TransmissionVars
 	}
 	//////////////////////////////////////////////////////////////////////////////
 
+	public static List<String>
+	fromJRPC2(
+		List<String>	list,
+		boolean			toCC )
+	{
+		List<String>	result = new ArrayList<String>( list.size());
+		
+		for ( String str: list ){
+			
+			result.add( fromJRPC2( str, toCC ));
+		}
+		
+		return( result );
+	}
+	
+	public static Map<String,Object>
+	fromJRPC2(
+		Map<String,Object>	map,
+		boolean				toCC )
+	{
+		HashMap<String,Object> result = new HashMap<>();
+		
+		for ( Map.Entry<String,Object> entry: map.entrySet()){
+			
+			result.put( fromJRPC2( entry.getKey(), toCC ), entry.getValue());
+		}
+		
+		return( result );
+	}
+	
+	public static String
+	fromJRPC2(
+		String		str,
+		boolean		toCC )
+	{
+		if ( str.equals( "primary_mime_type" )){
+			
+			toCC = false;
+		}
+		
+		if ( toCC ){
+						
+			String[] bits = str.split( "_" );
+			
+			if ( bits.length == 1 ){
+				
+				return( str );
+				
+			}else{
+				String result = "";
+				
+				for ( String b: bits ){
+				
+					if ( result.isEmpty()){
+						
+						result = b;
+						
+					}else{
+						
+						result += Character.toUpperCase( b.charAt(0)) + b.substring(1);
+						
+					}
+				}
+				
+				return( result );
+			}
+			
+		}else{
+		
+			return( str.replaceAll( "_", "-" ));
+		}
+	}
+	
+	public static <T extends Map<String,Object>> T
+	toJRPC2(
+		T	map_in,
+		T	map_out )
+	{
+		for ( Map.Entry<String,Object> entry: map_in.entrySet()){
+		
+			map_out.put( toJRPC2( entry.getKey()),entry.getValue());
+		}
+		
+		return( map_out );
+	}
+	
+	public static String
+	toJRPC2(
+		String		str )
+	{
+		str = str.replaceAll( "-", "_" );
+		
+		String result = "";
+		
+		char[] chars = str.toCharArray();
+		
+		for ( char c: chars ){
+			
+			if ( Character.isUpperCase(c)){
+				
+				result += "_" + Character.toLowerCase(c);
+				
+			}else{
+				
+				result += c;
+			}
+		}
+		
+		return( result );
+	}
 }

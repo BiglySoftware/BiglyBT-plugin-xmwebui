@@ -90,7 +90,7 @@ public class TorrentGetMethods
 	}
 
 	static void get(XMWebUIPlugin plugin,
-			TrackerWebPageRequest request, String session_id, Map args,
+			TrackerWebPageRequest request, String session_id, boolean jrpc2, Map args,
 			Map<String, Object> result) {
 
 		// When "file_indexes" key is present, returns:
@@ -119,13 +119,15 @@ public class TorrentGetMethods
 
 			fields = new ArrayList<>();
 		} else {
+			if ( jrpc2 ){
+				fields = TransmissionVars.fromJRPC2( fields, true );
+			}
 			Collections.sort(fields);
 		}
 
 		Object ids = args.get("ids");
 
-		boolean is_recently_active = plugin.handleRecentlyRemoved(session_id, args,
-				result);
+		boolean is_recently_active = plugin.handleRecentlyRemoved(session_id, args,	result);
 
 		List<DownloadStub> downloads = plugin.getDownloads(ids, true);
 
@@ -133,6 +135,9 @@ public class TorrentGetMethods
 		List<String> file_fields = (List<String>) args.get(
 				ARG_TORRENT_GET_FILE_FIELDS);
 		if (file_fields != null) {
+			if ( jrpc2 ){
+				file_fields = TransmissionVars.fromJRPC2( file_fields, true );
+			}
 			Collections.sort(file_fields);
 		}
 
@@ -147,11 +152,11 @@ public class TorrentGetMethods
 		for (DownloadStub download_stub : downloads) {
 			if (download_stub.isStub()) {
 				
-				method_Torrent_Get_Stub(plugin, request, args, fields, torrent_info,
+				method_Torrent_Get_Stub(plugin, request, jrpc2, args, fields, torrent_info,
 						download_stub, file_fields, xmlEscape, isTableFormat);
 				
 			} else {
-				method_Torrent_Get_NonStub(plugin, request, args, fields, torrent_info,
+				method_Torrent_Get_NonStub(plugin, request, jrpc2, args, fields, torrent_info,
 						(Download) download_stub, file_fields, xmlEscape);
 			}
 		} // for downloads
@@ -249,7 +254,7 @@ public class TorrentGetMethods
 	 * @param fields Sorted
 	 */
 	private static void method_Torrent_Get_NonStub(XMWebUIPlugin plugin,
-			TrackerWebPageRequest request, Map<String, Object> args,
+			TrackerWebPageRequest request, boolean jrpc2, Map<String, Object> args,
 			List<String> fields, Map<Long, Map<String, Object>> torrent_info,
 			Download download, List<String> file_fields, boolean xmlEscape) {
 
@@ -584,7 +589,7 @@ public class TorrentGetMethods
 
 					String host = (String) request.getHeaders().get("host");
 
-					value = torrentGet_files(plugin, torrent, host, core_download,
+					value = torrentGet_files(plugin, jrpc2, torrent, host, core_download,
 							download_id, file_fields, args);
 
 					// One hash for all files.  This won't work when our file list is a partial
@@ -596,8 +601,7 @@ public class TorrentGetMethods
 				case FIELD_TORRENT_FILESTATS:
 					// RPC v5
 
-					value = isMetaDownload ? 0
-							: torrentGet_fileStats(core_download, file_fields, args);
+					value = isMetaDownload ? 0 : torrentGet_fileStats(jrpc2, core_download, file_fields, args);
 
 					break;
 				case FIELD_TORRENT_HASH_STRING:
@@ -750,7 +754,7 @@ public class TorrentGetMethods
 				case FIELD_TORRENT_PEERS:
 					// RPC v2
 
-					value = torrentGet_peers(core_download, peer_fields);
+					value = torrentGet_peers( jrpc2, core_download, peer_fields);
 
 					break;
 				case FIELD_TORRENT_PEERS_CONNECTED:
@@ -913,8 +917,7 @@ public class TorrentGetMethods
 					break;
 				case "trackers":
 
-					String agent = MapUtils.getMapString(request.getHeaders(),
-							"User-Agent", "");
+					String agent = MapUtils.getMapString(request.getHeaders(), "User-Agent", "");
 					boolean hack = agent.contains("httpok"); // Torrnado
 
 					value = torrentGet_trackers(core_download, hack);
@@ -923,7 +926,7 @@ public class TorrentGetMethods
 				case "trackerStats":
 					// RPC v7
 
-					value = torrentGet_trackerStats(core_download);
+					value = torrentGet_trackerStats( jrpc2, core_download);
 
 					break;
 				case FIELD_TORRENT_TOTAL_SIZE: {
@@ -1165,6 +1168,9 @@ public class TorrentGetMethods
 				case FIELD_TORRENT_PRIMARY_MIME_TYPE: {
 					File file = download.getPrimaryFile().getFile();
 					value = URLConnection.guessContentTypeFromName(file.getName());
+					if ( value == null ){
+						value = "application/octet-stream";
+					}
 					/* Files.probeContentType added in Android API 26
 					try {
 						value = Files.probeContentType(file.toPath());
@@ -1192,17 +1198,24 @@ public class TorrentGetMethods
 				torrent.put(field, value);
 			}
 		} // for fields		
+		
+		if ( jrpc2 ){
+			
+			torrent = TransmissionVars.toJRPC2( torrent, new LinkedHashMap<>());
+			
+			torrent_info.put(download_id, torrent);
+		}
 	}
 
 	/**
 	 * @param fields Sorted
 	 */
 	private static void method_Torrent_Get_Stub(XMWebUIPlugin plugin,
-			TrackerWebPageRequest request, Map args, List<String> fields,
+			TrackerWebPageRequest request, boolean jrpc2, Map args, List<String> fields,
 			Map<Long, Map<String, Object>> torrent_info, DownloadStub download_stub,
 			List<String> file_fields, boolean xmlEscape, boolean includeNullValues) {
 
-		Map<String, Object> torrent = new LinkedHashMap<>();
+		LinkedHashMap<String, Object> torrent = new LinkedHashMap<>();
 
 		long download_id = plugin.getID(download_stub, true);
 
@@ -1327,7 +1340,7 @@ public class TorrentGetMethods
 
 					String host = (String) request.getHeaders().get("host");
 
-					value = torrentGet_files_stub(download_stub, download_id, file_fields,
+					value = torrentGet_files_stub(jrpc2, download_stub, download_id, file_fields,
 							args);
 
 					break;
@@ -1340,7 +1353,7 @@ public class TorrentGetMethods
 				case FIELD_TORRENT_FILESTATS:
 					// RPC v5
 
-					value = torrentGet_fileStats_stub(download_stub, file_fields, args);
+					value = torrentGet_fileStats_stub(jrpc2, download_stub, file_fields, args);
 
 					break;
 				case FIELD_TORRENT_HASH_STRING:
@@ -1554,6 +1567,14 @@ public class TorrentGetMethods
 					break;
 
 				case "trackers":
+					if (jrpc2 ){
+						String agent = MapUtils.getMapString(request.getHeaders(), "User-Agent", "");
+						boolean hack = agent.contains("httpok"); // Torrnado
+
+						value = torrentGet_trackersStub(download_stub, hack);
+						
+						break;
+					}
 				case "trackerStats":
 				case FIELD_TORRENT_PEERS:
 
@@ -1595,6 +1616,11 @@ public class TorrentGetMethods
 				case "labels":
 					value = new ArrayList<>();
 					break;
+				case FIELD_TORRENT_PRIMARY_MIME_TYPE: {
+				
+					value = "application/octet-stream";
+					break;
+				}
 				default:
 					System.out.println( "Missing field: " + field );
 
@@ -1614,6 +1640,13 @@ public class TorrentGetMethods
 					plugin.log("Unknown stub field: " + field);
 				}
 			}
+		}
+		
+		if ( jrpc2 ){
+			
+			torrent = TransmissionVars.toJRPC2( torrent, new LinkedHashMap<>());
+			
+			torrent_info.put(download_id, torrent);
 		}
 	}
 
@@ -1765,7 +1798,7 @@ public class TorrentGetMethods
 		return value;
 	}
 
-	private static Object torrentGet_fileStats(DownloadManager download,
+	private static Object torrentGet_fileStats(boolean jrpc2, DownloadManager download,
 			List<String> file_fields, Map args) {
 		// | a file's non-constant properties.    |
 		// | array of tr_info.filecount objects,  |
@@ -1781,9 +1814,14 @@ public class TorrentGetMethods
 		for (DiskManagerFileInfo file : files) {
 			Map<String, Object> map = new TreeMap<>();
 
-			stats_list.add(map);
-
 			torrentGet_fileStats(map, file_fields, file);
+			
+			if ( jrpc2 ){
+				
+				map = TransmissionVars.toJRPC2( map, new TreeMap<>());
+			}
+			
+			stats_list.add(map);
 		}
 
 		return stats_list;
@@ -1806,7 +1844,7 @@ public class TorrentGetMethods
 		}
 	}
 
-	private static Object torrentGet_fileStats_stub(DownloadStub download_stub,
+	private static Object torrentGet_fileStats_stub(boolean jrpc2, DownloadStub download_stub,
 			List<String> file_fields, Map args) {
 		DownloadStubFile[] stubFiles = download_stub.getStubFiles();
 
@@ -1815,9 +1853,15 @@ public class TorrentGetMethods
 		for (DownloadStubFile stubFile : stubFiles) {
 
 			Map<String, Object> map = new TreeMap<>();
-			stats_list.add(map);
-
+			
 			torrentGet_fileStats_stub(map, null, stubFile);
+			
+			if ( jrpc2 ){
+				
+				map = TransmissionVars.toJRPC2( map, new TreeMap<>());
+			}
+
+			stats_list.add(map);
 		}
 
 		return stats_list;
@@ -1877,7 +1921,7 @@ public class TorrentGetMethods
 		}
 	}
 
-	private static Object torrentGet_files(XMWebUIPlugin plugin,
+	private static Object torrentGet_files(XMWebUIPlugin plugin, boolean jrpc2,
 			Map<String, Object> mapParent, String host, DownloadManager download,
 			long download_id, List<String> file_fields, Map<String, Object> args) {
 		// | array of objects, each containing:   |
@@ -1925,7 +1969,7 @@ public class TorrentGetMethods
 					map.put(FIELD_FILES_INDEX, i);
 				}
 
-				torrentGet_files(plugin, map, file_fields, host, baseURL, download,
+				torrentGet_files(plugin, jrpc2, map, file_fields, host, baseURL, download,
 						file);
 				if (file_fields != null && file_fields.size() > 0) {
 					torrentGet_fileStats(map, file_fields, file);
@@ -1955,7 +1999,7 @@ public class TorrentGetMethods
 				map.put(FIELD_FILES_INDEX, file_index);
 				DiskManagerFileInfo fileInfo = files[file_index];
 				torrentGet_fileStats(map, file_fields, fileInfo);
-				torrentGet_files(plugin, map, file_fields, host, baseURL, download,
+				torrentGet_files(plugin, jrpc2, map, file_fields, host, baseURL, download,
 						fileInfo);
 
 				if (mapPerFile) {
@@ -1975,16 +2019,18 @@ public class TorrentGetMethods
 		return file_list;
 	}
 
-	private static void torrentGet_files(XMWebUIPlugin plugin,
-			Map<String, Object> obj, List<String> sortedFields, String host,
+	private static void torrentGet_files(XMWebUIPlugin plugin, boolean jrpc2,
+			Map<String, Object> result_out, List<String> sortedFields, String host,
 			String baseURL, DownloadManager download, DiskManagerFileInfo file) {
 		boolean all = sortedFields == null || sortedFields.size() == 0;
 		File realFile = null;
+		HashMap<String, Object> result = new HashMap<>();
+		
 		if (canAdd(FIELD_FILESTATS_BYTES_COMPLETED, sortedFields, all)) {
-			obj.put(FIELD_FILESTATS_BYTES_COMPLETED, file.getDownloaded()); // this must be a spec error...
+			result.put(FIELD_FILESTATS_BYTES_COMPLETED, file.getDownloaded()); // this must be a spec error...
 		}
 		if (canAdd(FIELD_FILES_LENGTH, sortedFields, all)) {
-			obj.put(FIELD_FILES_LENGTH, file.getLength());
+			result.put(FIELD_FILES_LENGTH, file.getLength());
 		}
 		if (canAdd(FIELD_FILES_NAME, sortedFields, all)) {
 			TOTorrent torrent = download.getTorrent();
@@ -1992,7 +2038,7 @@ public class TorrentGetMethods
 			realFile = file.getFile(true);
 
 			if (simpleTorrent) {
-				obj.put(FIELD_FILES_NAME, realFile.getName());
+				result.put(FIELD_FILES_NAME, realFile.getName());
 			} else {
 				File saveLocation = download.getSaveLocation();
 				String relativePath = FileUtil.getRelativePath(saveLocation, realFile);
@@ -2000,9 +2046,9 @@ public class TorrentGetMethods
 					// TODO: .dnd_az parent..
 					//String dnd_sf = dm.getDownloadState().getAttribute( DownloadManagerState.AT_DND_SUBFOLDER );
 
-					obj.put(FIELD_FILES_NAME, relativePath);
+					result.put(FIELD_FILES_NAME, relativePath);
 				} else {
-					obj.put(FIELD_FILES_NAME, realFile.getAbsolutePath());
+					result.put(FIELD_FILES_NAME, realFile.getAbsolutePath());
 				}
 			}
 		}
@@ -2015,7 +2061,7 @@ public class TorrentGetMethods
 			if (canAdd(FIELD_FILES_MUST_EXIST, sortedFields, showAllVuze)) {
 				boolean mustExist = (isDeleted(file) || file.isSkipped())
 						? RDResumeHandler.fileMustExist(download, file) : true;
-				obj.put(FIELD_FILES_MUST_EXIST, mustExist);
+				result.put(FIELD_FILES_MUST_EXIST, mustExist);
 			}
 
 			if (canAdd(FIELD_FILES_CONTENT_URL, sortedFields, showAllVuze)) {
@@ -2031,18 +2077,18 @@ public class TorrentGetMethods
 						s = s.substring(baseURL.length());
 					}
 				}
-				obj.put(FIELD_FILES_CONTENT_URL, s);
+				result.put(FIELD_FILES_CONTENT_URL, s);
 			}
 
 			if (canAdd(FIELD_FILES_FULL_PATH, sortedFields, showAllVuze)) {
 				if (realFile == null) {
 					realFile = file.getFile(true);
 				}
-				obj.put(FIELD_FILES_FULL_PATH, realFile.toString());
+				result.put(FIELD_FILES_FULL_PATH, realFile.toString());
 			}
 			
 			if (canAdd("eta", sortedFields, showAllVuze)) {
-				obj.put("eta", file.getETA());
+				result.put("eta", file.getETA());
 			}
 		}
 
@@ -2051,9 +2097,16 @@ public class TorrentGetMethods
 				plugin.referenceKeeper.put(SystemTime.getCurrentTime(), realFile);
 			}
 		}
+		
+		if ( jrpc2 ){
+			
+			result = TransmissionVars.toJRPC2( result, new HashMap<>());
+		}
+		
+		result_out.putAll(result);
 	}
 
-	private static Object torrentGet_files_stub(DownloadStub download_stub,
+	private static List<Map> torrentGet_files_stub(boolean jrpc2, DownloadStub download_stub,
 			long download_id, List<String> file_fields, Map args) {
 		DownloadStubFile[] stubFiles = download_stub.getStubFiles();
 
@@ -2078,6 +2131,9 @@ public class TorrentGetMethods
 					torrentGet_fileStats_stub(map, file_fields, sf);
 				}
 
+				if ( jrpc2 ){
+					map = TransmissionVars.toJRPC2( map, new TreeMap<>());
+				}
 				hashAndAdd(map, file_list, listHCs, i);
 			}
 		} else {
@@ -2096,6 +2152,10 @@ public class TorrentGetMethods
 				torrentGet_fileStats_stub(map, file_fields, file);
 				torrentGet_file_stub(map, file_fields, file);
 
+				if ( jrpc2 ){
+					map = TransmissionVars.toJRPC2( map, new TreeMap<>());
+				}
+				
 				hashAndAdd(map, file_list, listHCs, i);
 			}
 		}
@@ -2174,7 +2234,7 @@ public class TorrentGetMethods
 		return value;
 	}
 
-	private static List torrentGet_peers(DownloadManager core_download,
+	private static List torrentGet_peers(boolean jrpc2, DownloadManager core_download,
 			List<String> sortedFields) {
 		// peers              | array of objects, each containing:   |
 		// +-------------------------+------------+
@@ -2211,7 +2271,6 @@ public class TorrentGetMethods
 		List<PEPeer> peerList = pm.getPeers();
 		for (PEPeer peer : peerList) {
 			Map<String, Object> map = new HashMap<>();
-			peers.add(map);
 
 			final PEPeerStats stats = peer.getStats();
 			boolean isDownloadingFrom = peer.isDownloadPossible()
@@ -2347,6 +2406,12 @@ public class TorrentGetMethods
 			if (canAdd(FIELD_PEERS_RATE_TO_PEER_BPS, sortedFields, all)) {
 				map.put(FIELD_PEERS_RATE_TO_PEER_BPS, stats.getDataSendRate());
 			}
+			
+			if ( jrpc2 ){
+				
+				map = TransmissionVars.toJRPC2( map, new HashMap<>());
+			}
+			peers.add(map);
 		}
 
 		return peers;
@@ -2601,7 +2666,7 @@ public class TorrentGetMethods
 		return new int[] { status_int, coreState };
 	}
 
-	private static Object torrentGet_trackerStats(DownloadManager core_download) {
+	private static Object torrentGet_trackerStats(boolean jrpc2, DownloadManager core_download) {
 		List<Map> tracker_stats = new ArrayList<>();
 
 		List<TrackerPeerSource> trackerPeerSources = core_download.getTrackerPeerSources();
@@ -2755,6 +2820,9 @@ public class TorrentGetMethods
 			/* used to match to a tr_tracker_info */
 			map.put("id", tps.hashCode());
 
+			if ( jrpc2 ){
+				map = TransmissionVars.toJRPC2( map,  new HashMap<>());
+			}
 			tracker_stats.add(map);
 		}
 
@@ -2811,6 +2879,31 @@ public class TorrentGetMethods
 		return trackers;
 	}
 
+	private static Object torrentGet_trackersStub(DownloadStub stub,
+			boolean hack) {
+		List<Map> trackers = new ArrayList<>();
+
+		String name = stub.getMainTracker();
+
+		Map<String, Object> map = new HashMap<>();
+		
+		if (hack && !name.contains("://")) {
+			name = "://" + name;
+		}
+
+		map.put("id", stub.hashCode());
+		/* the full announce URL */
+		map.put("announce", name); // TODO
+		/* the full scrape URL */
+		map.put("scrape", name); // TODO
+		/* which tier this tracker is in */
+		map.put("tier", 0); // TODO: int);
+
+		trackers.add(map);
+		
+		return trackers;
+	}
+	
 	private static Object torrentGet_wanted(DownloadManager download) {
 		// wanted             
 		// | an array of tr_info.fileCount        | tr_info

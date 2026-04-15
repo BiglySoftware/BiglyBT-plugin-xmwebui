@@ -5,6 +5,26 @@
    https://github.com/transmission/transmission/blob/master/extras/rpc-spec.txt
    to include BiglyBT additions.
 
+    UPDATE (15/04/2026)
+    ------
+    
+	The UI/RPC was transitioned to use JSON RPC 2.0 - https://www.jsonrpc.org/specification
+	
+	A lot of the other changes revolve around switching method/field names from a mix of
+	camelcase and "-" separated words to "_"
+	
+	For example:
+	    canBePublic		-> can_be_public
+	    file-location	-> file_location
+    
+    but the state of the RPC has moved on a lot since the last update to this plugin...
+    
+	https://github.com/transmission/transmission/blob/main/docs/rpc-spec.md
+
+	Very basic changes were made to support this but ignoring any BiglyBT specific
+	extensions...
+
+
 1.1  Terminology
 
    The JSON terminology in RFC 4627 is used.

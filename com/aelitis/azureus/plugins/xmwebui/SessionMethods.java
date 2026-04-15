@@ -94,13 +94,20 @@ public class SessionMethods
 	}
 
 	public static void method_Session_Get(XMWebUIPlugin plugin,
-			PluginInterface plugin_interface, TrackerWebPageRequest request,
-			Map<String, Object> args, Map<String, Object> result) {
+			PluginInterface plugin_interface, TrackerWebPageRequest request, boolean jrpc2,
+			Map<String, Object> args, Map<String, Object> result_out) {
 		//noinspection unchecked
+		
+		Map<String,Object> result = new HashMap<>();
+		
 		List<String> fields = (List<String>) args.get(ARG_FIELDS);
 		boolean all = fields == null || fields.size() == 0;
 		if (!all) {
 			// sort so we can't use Collections.binarySearch
+			
+			if ( jrpc2 ){
+				fields = TransmissionVars.fromJRPC2( fields, true );
+			}
 			Collections.sort(fields);
 		}
 
@@ -342,12 +349,19 @@ public class SessionMethods
 		if (canAdd("port", fields, all)) {
 			result.put("port", (long) tcp_port); // number     port number
 		}
-		if (canAdd("rpc-version", fields, all)) {
-			result.put("rpc-version", 17L); // number     the current RPC API version
+		if ( jrpc2 ){
+			if (canAdd("rpc_version_semver", fields, all)) {
+				result.put("rpc_version_semver", "6.0.0"); // number     the current RPC API version
+			}
+		}else{
+			if (canAdd("rpc-version", fields, all)) {
+				result.put("rpc-version", 17L); // number     the current RPC API version
+			}
+			if (canAdd("rpc-version-minimum", fields, all)) {
+				result.put("rpc-version-minimum", 6L); // number     the minimum RPC API version supported
+			}
 		}
-		if (canAdd("rpc-version-minimum", fields, all)) {
-			result.put("rpc-version-minimum", 6L); // number     the minimum RPC API version supported
-		}
+		
 		if (canAdd("seedRatioLimit", fields, all)) {
 			result.put("seedRatioLimit", (double) stop_ratio); // double     the default seed ratio for torrents to use
 		}
@@ -360,7 +374,11 @@ public class SessionMethods
 
 		if (canAdd("version", fields, all)) {
 			String version = plugin_interface.getPluginVersion();
-			result.put("version", version == null ? "Source" : version); // string
+			String ver_str =  version == null ? "Source" : version;
+			if ( jrpc2 ){
+				ver_str += " (a)";	// format has to be "version (hex revision)" else UI fails
+			}
+			result.put("version",ver_str); // string
 		}
 		if (canAdd("az-rpc-version", fields, all)) {
 			result.put("az-rpc-version", XMWebUIPlugin.VUZE_RPC_VERSION);
@@ -409,10 +427,16 @@ public class SessionMethods
 		}
 		//result.put("az-message", "This is a test message with a  <A HREF=\"http://www.biglybt.com\">Link</a>");
 
+		if ( jrpc2 ){
+			
+			result = TransmissionVars.toJRPC2( result, new HashMap<>());
+		}
+		
+		result_out.putAll( result );
 	}
 
 	public static void method_Session_Set(XMWebUIPlugin plugin,
-			PluginInterface plugin_interface, Map<String, Object> args)
+			PluginInterface plugin_interface, boolean jrpc2, Map<String, Object> args)
 			throws IOException {
 
 		plugin.checkUpdatePermissions();
@@ -455,6 +479,12 @@ public class SessionMethods
 
 			String key = arg.getKey();
 			Object val = arg.getValue();
+			
+			if ( jrpc2 ){
+				
+				key = TransmissionVars.fromJRPC2(key, false );
+			}
+			
 			try {
 				if (key.startsWith("alt-speed")) {
 					// TODO:

@@ -891,7 +891,7 @@ XMWebUIPlugin
 	{
 		Object	ids = args.get( "ids" );
 		
-		if ((ids instanceof String) && ids.equals("recently-active")){
+		if ((ids instanceof String) && ( ids.equals("recently-active") ||ids.equals("recently_active"))){
 						
 			synchronized( recently_removed ){
 				
@@ -1569,6 +1569,10 @@ XMWebUIPlugin
 			return response;
 		}
 
+		Object jsonrpc = request.get( "jsonrpc" );
+		
+		boolean jrpc2 = jsonrpc != null && ((String)jsonrpc).equals( "2.0" );
+				
 		String method = (String)request.get( "method" );
 		
 		if ( method == null ){
@@ -1576,7 +1580,24 @@ XMWebUIPlugin
 			throw( new IOException( "'method' missing" ));
 		}
 
-		Map	args = (Map)request.get( "arguments" );
+		Map	args;
+		
+		if ( jrpc2 ){
+			
+			args = (Map)request.get( "params" );
+
+			response.put( "jsonrpc", "2.0" );
+			
+			Object id = request.get( "id" );
+			
+			if ( id != null ){
+			
+				response.put( "id", id );
+			}
+			
+		}else{
+			args = (Map)request.get( "arguments" );
+		}
 		
 		if ( args == null ){
 			
@@ -1584,41 +1605,88 @@ XMWebUIPlugin
 		}
 
 		try{
-			Map	result = processRequest( wp_request, session_id, method, args );
+			Map	result = processRequest( wp_request, session_id, jrpc2, method, args );
 
 			if ( result == null ){
 				
 				result = new HashMap();
 			}
+			
+			if ( jrpc2 ){
 				
-			response.put( "arguments", result );
+				response.put( "result", result );
+				
+			}else{
+				
+				response.put( "arguments", result );
 			
-			response.put( "result", "success" );
-			
+				response.put( "result", "success" );
+			}
 		}catch( PermissionDeniedException e ){
 			
 			throw( e );
 			
 		}catch( TextualException e ){
 
-			response.put( "result", e.getMessage());
-
-			Throwable cause = e.getCause();
-			if (cause != null) {
-				log("processRequest", cause);
-				response.put("cause", cause.toString());
+			if ( jrpc2 ){
+				
+				Map error = new HashMap<>();
+				
+				response.put( "error", error );
+				
+				String msg = e.getMessage();
+				
+				Throwable cause = e.getCause();
+				
+				if (cause != null) {
+					
+					log("processRequest", cause);
+					
+					msg += "/" + cause.toString();
+				}
+				
+				error.put( "code", 1 );
+				
+				error.put( "message", msg );
+				
+			}else{
+				response.put( "result", e.getMessage());
+	
+				Throwable cause = e.getCause();
+				
+				if (cause != null) {
+					
+					log("processRequest", cause);
+					
+					response.put("cause", cause.toString());
+				}
 			}
-
 		}catch( Throwable e ){
-			log("processRequest", e);
-			response.put( "result", "error: " + StaticUtils.getCausesMesssages( e ));
+			
+			log( "processRequest", e );
+
+			if ( jrpc2 ){
+				
+				Map error = new HashMap<>();
+				
+				response.put( "error", error );
+				
+				error.put( "message", StaticUtils.getCausesMesssages( e ));
+				
+			}else{
+			
+				response.put( "result", "error: " + StaticUtils.getCausesMesssages( e ));
+			}
 		}
 		
-		Object	tag = request.get( "tag" );
-
-		if ( tag != null ){
+		if ( !jrpc2 ){
 			
-			response.put( "tag", tag );
+			Object	tag = request.get( "tag" );
+	
+			if ( tag != null ){
+				
+				response.put( "tag", tag );
+			}
 		}
 		
 		return( response );
@@ -1628,6 +1696,7 @@ XMWebUIPlugin
 	processRequest(
 		TrackerWebPageRequest		request,
 		String						session_id,
+		boolean						jrpc2,
 		String						method,
 		Map							args )
 	
@@ -1643,11 +1712,16 @@ XMWebUIPlugin
 				// to get 271 working with this backend change remote.js RPC _Root to be
 				// _Root                   : './transmission/rpc',
 
+			if ( jrpc2 ){
+			
+				method = TransmissionVars.fromJRPC2( method, false );
+			}
+			
 			switch (method) {
 				case METHOD_SESSION_SET:
 
 					try {
-						SessionMethods.method_Session_Set(this, plugin_interface, args);
+						SessionMethods.method_Session_Set(this, plugin_interface, jrpc2, args);
 
 					} finally {
 
@@ -1659,8 +1733,7 @@ XMWebUIPlugin
 					break;
 				case METHOD_SESSION_GET:
 
-					SessionMethods.method_Session_Get(this, plugin_interface, request, args,
-							result);
+					SessionMethods.method_Session_Get(this, plugin_interface, request, jrpc2, args, result);
 
 					break;
 				case METHOD_SESSION_STATS:
@@ -1732,12 +1805,12 @@ XMWebUIPlugin
 					break;
 				case METHOD_TORRENT_SET:
 
-					getTorrentMethods().set(session_id, args, result);
+					getTorrentMethods().set(session_id, jrpc2, args, result);
 
 					break;
 				case METHOD_TORRENT_GET:
 
-					TorrentGetMethods.get(this, request, session_id, args, result);
+					TorrentGetMethods.get(this, request, session_id, jrpc2, args, result);
 
 					break;
 				case METHOD_TORRENT_REANNOUNCE:

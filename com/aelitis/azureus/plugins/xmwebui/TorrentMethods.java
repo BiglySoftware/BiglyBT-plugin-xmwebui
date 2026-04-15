@@ -851,11 +851,14 @@ public class TorrentMethods
 		}
 	}
 
-	public void set(String session_id, Map args, Map result) {
+	public void set(String session_id, boolean jrpc2, Map args, Map result) {
 		Object ids = args.get("ids");
 
 		plugin.handleRecentlyRemoved(session_id, args, result);
 
+		if ( jrpc2 ){
+			args = TransmissionVars.fromJRPC2( args, false );
+		}
 		List<DownloadStub> downloads = plugin.getDownloads(ids, false);
 
 		// RPC v5
