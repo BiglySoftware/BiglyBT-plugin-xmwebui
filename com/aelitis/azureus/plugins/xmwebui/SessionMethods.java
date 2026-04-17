@@ -496,6 +496,15 @@ public class SessionMethods
 					// "alt-speed-time-day"             | number     | what day(s) to turn on alt speeds (look at tr_sched_day)
 					// "alt-speed-up"                   | number     | max global upload speed (KBps)
 
+					if( key.equals( TR_PREFS_KEY_ALT_SPEED_ENABLED )){
+					
+						boolean enabled = StaticUtils.getBoolean(val);
+						
+						if ( enabled ){
+							
+							Debug.out( "Alternative Speeds not implemented yet" );
+						}
+					}
 				} else if (key.equals(TR_PREFS_KEY_BLOCKLIST_URL)) {
 					// "blocklist-url"                  | string     | location of the blocklist to use for "blocklist-update"
 					IpFilter ipFilter = IpFilterManagerFactory.getSingleton().getIPFilter();
@@ -737,8 +746,12 @@ public class SessionMethods
 		}
 	}
 
-	public static void method_Session_Stats(Map<String, Object> args,
-			Map<String, Object> result) {
+	public static void 
+	method_Session_Stats(
+		boolean				jrpc2,
+		Map<String, Object>	args,
+		Map<String, Object>	result_out ) 
+	{
 		/*
 		string                     | value type
 		---------------------------+-------------------------------------------------
@@ -770,9 +783,14 @@ public class SessionMethods
 		boolean all = fields == null || fields.size() == 0;
 		if (!all) {
 			// sort so we can't use Collections.binarySearch
+			if ( jrpc2 ){
+				fields = TransmissionVars.fromJRPC2( fields, true );
+			}
 			Collections.sort(fields);
 		}
 
+		Map<String,Object> result = new HashMap<>();
+		
 		Core core = CoreFactory.getSingleton();
 		GlobalManager gm = core.getGlobalManager();
 		GlobalManagerStats stats = gm.getStats();
@@ -816,8 +834,6 @@ public class SessionMethods
 		if (canAdd(TR_SESSION_STATS_CURRENT, fields, all)) {
 			Map<String, Object> current_stats = new HashMap<>();
 
-			result.put(TR_SESSION_STATS_CURRENT, current_stats);
-
 			current_stats.put("uploadedBytes", stats.getTotalDataBytesSent());
 			current_stats.put("downloadedBytes", stats.getTotalDataBytesReceived());
 
@@ -842,6 +858,12 @@ public class SessionMethods
 
 			current_stats.put("secondsActive", totalStats.getSessionUpTime());
 			current_stats.put("filesAdded", 0);
+			
+			if ( jrpc2 ){
+				current_stats = TransmissionVars.toJRPC2( current_stats, new HashMap<>());
+			}
+			
+			result.put(TR_SESSION_STATS_CURRENT, current_stats);
 		}
 
 		if (canAdd(TR_SESSION_STATS_CUMULATIVE, fields, all)) {
@@ -849,7 +871,6 @@ public class SessionMethods
 			OverallStats totalStats = StatsFactory.getStats();
 
 			Map<String, Object> cumulative_stats = new HashMap<>();
-			result.put(TR_SESSION_STATS_CUMULATIVE, cumulative_stats);
 
 			cumulative_stats.put("uploadedBytes", totalStats.getUploadedBytes());
 			cumulative_stats.put("downloadedBytes", totalStats.getDownloadedBytes());
@@ -866,7 +887,20 @@ public class SessionMethods
 			long sessionCount = COConfigurationManager.getIntParameter(
 					"locale.set.complete.count");
 			cumulative_stats.put("sessionCount", sessionCount);
+			
+			if ( jrpc2 ){
+				cumulative_stats = TransmissionVars.toJRPC2( cumulative_stats, new HashMap<>());
+			}
+			
+			result.put(TR_SESSION_STATS_CUMULATIVE, cumulative_stats);
 		}
+		
+		if ( jrpc2 ){
+			
+			result = TransmissionVars.toJRPC2( result, new HashMap<>());
+		}
+		
+		result_out.putAll( result );
 	}
 
 	private static String getUserMessage(XMWebUIPlugin plugin,

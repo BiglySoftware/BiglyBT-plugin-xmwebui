@@ -35,6 +35,7 @@ import com.biglybt.core.logging.LogAlert;
 import com.biglybt.core.logging.Logger;
 import com.biglybt.core.metasearch.*;
 import com.biglybt.core.metasearch.impl.web.WebEngine;
+import com.biglybt.core.networkmanager.admin.NetworkAdmin;
 import com.biglybt.core.pairing.PairingManager;
 import com.biglybt.core.pairing.PairingManagerFactory;
 import com.biglybt.core.security.CryptoManager;
@@ -84,6 +85,7 @@ import org.json.simple.JSONValue;
 import java.io.*;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Method;
+import java.net.InetAddress;
 import java.net.MalformedURLException;
 import java.net.URI;
 import java.net.URL;
@@ -321,6 +323,7 @@ XMWebUIPlugin
 				"xmwebui.openui", "");
 		ParameterListener webdir_param_listener = param -> {
 			String val = ((DirectoryParameter) param).getValue();
+			updateConfigLaunchParams();
 			launchAltWebUI_param.setEnabled(
 					val != null && FileUtil.newFile(val).isDirectory());
 		};
@@ -633,19 +636,16 @@ XMWebUIPlugin
 		}
 	}
 
-	private void updateConfigLaunchParams() {
+	private void 
+	updateConfigLaunchParams() 
+	{
 		PluginConfig pc = plugin_interface.getPluginconfig();
-
-		String bindIP = pc.getPluginStringParameter(WebPlugin.CONFIG_BIND_IP,
-				CONFIG_BIND_IP_DEFAULT);
-		if (bindIP.isEmpty()) {
-			bindIP = "127.0.0.1";
-		}
-		int port = pc.getPluginIntParameter(WebPlugin.CONFIG_PORT,
-				CONFIG_PORT_DEFAULT);
-		launchAltWebUI_param.setHyperlink(
-				"http://" + bindIP + ":" + port + "/transmission/web");
-		openui_param.setHyperlink("http://" + bindIP + ":" + port + "/");
+		
+		String server_url = getServerURL();
+		
+		launchAltWebUI_param.setHyperlink( server_url + "transmission/web");
+		
+		openui_param.setHyperlink( server_url);
 	}
 
 	protected void changeLogToFile(boolean logToFile) {
@@ -1738,7 +1738,7 @@ XMWebUIPlugin
 					break;
 				case METHOD_SESSION_STATS:
 
-					SessionMethods.method_Session_Stats(args, result);
+					SessionMethods.method_Session_Stats( jrpc2, args, result);
 
 					break;
 				case "torrent-add":
