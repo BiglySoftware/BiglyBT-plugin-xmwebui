@@ -63,7 +63,7 @@ public class TorrentMethods
 		this.pi = pi;
 	}
 
-	public void add(final Map args, Map result, boolean xmlEscape)
+	public void add(boolean jrpc2, Map<String,Object> _args, Map result, boolean xmlEscape)
 
 			throws IOException, DownloadException, TextualException {
 		/*
@@ -104,6 +104,14 @@ public class TorrentMethods
 		 */
 		plugin.checkUpdatePermissions();
 
+		Map<String,Object> args;
+		
+		if ( jrpc2 ){
+			args = TransmissionVars.fromJRPC2( _args, false );
+		}else{
+			args = _args;
+		}
+		
 		Map<String, Object> mapTorrent = null;
 
 		if (args.containsKey("metainfo")) {
@@ -506,7 +514,7 @@ public class TorrentMethods
 		}
 	}
 
-	public void remove(Map<HashWrapper2, MagnetDownload> magnet_downloads, Map args,
+	public void remove(boolean jrpc2, Map<HashWrapper2, MagnetDownload> magnet_downloads, Map<String,Object> args,
 			Map result)
 			throws IOException {
 		/*
@@ -521,6 +529,10 @@ public class TorrentMethods
 		 */
 		plugin.checkUpdatePermissions();
 
+		if ( jrpc2 ){
+			args = TransmissionVars.fromJRPC2( args, false );
+		}
+		
 		Object ids = args.get("ids");
 
 		boolean delete_data = getBoolean(args.get("delete-local-data"));

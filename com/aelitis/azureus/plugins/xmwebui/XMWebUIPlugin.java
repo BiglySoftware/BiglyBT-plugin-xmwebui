@@ -1745,7 +1745,7 @@ XMWebUIPlugin
 					String agent = MapUtils.getMapString(request.getHeaders(), "User-Agent", "");
 					boolean xmlEscape = agent.startsWith("Mozilla/");
 
-					getTorrentMethods().add(args, result, xmlEscape);
+					getTorrentMethods().add( jrpc2, args, result, xmlEscape);
 
 					// this is handled within the torrent-add method: save_core_state = true;
 
@@ -1798,7 +1798,7 @@ XMWebUIPlugin
 				case METHOD_TORRENT_REMOVE:
 					// RPC v3
 
-					getTorrentMethods().remove(magnet_downloads, args, result);
+					getTorrentMethods().remove( jrpc2, magnet_downloads, args, result);
 
 					save_core_state = true;
 
